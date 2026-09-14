@@ -86,7 +86,7 @@ export default function Register() {
       <AuthLayout
         icon={Mail}
         title="Confirm your signup"
-        subtitle={`Enter the security code sent to ${email}. DriveBid will then email your confirmation link.`}
+        subtitle={`Enter the security code sent to ${email}. Relay will then email your confirmation link.`}
       >
         {error && (
           <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">

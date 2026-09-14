@@ -28,7 +28,7 @@ export default function VerifyEmail(){
 
   return <div className="db-shell db-verification-page">
     <section className="db-panel db-verification-result">
-      <div className="db-brand db-verification-brand"><div className="db-brandmark">DB</div><span>DriveBid</span></div>
+      <div className="db-brand db-verification-brand"><div className="db-brandmark">R</div><span>Relay</span></div>
       <div className={`db-verification-icon ${state.status}`}>{state.status==='loading'?'…':state.status==='success'?'✓':'!'}</div>
       <h1>{state.status==='loading'?'Verifying email':state.status==='success'?'Email verified':'Verification problem'}</h1>
       <p>{state.message}</p>

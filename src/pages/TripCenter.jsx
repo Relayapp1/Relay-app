@@ -63,6 +63,7 @@ export default function TripCenter(){
   const [chatTrip,setChatTrip]=useState(null);
   const [draft,setDraft]=useState('');
   const [alert,setAlert]=useState('');
+  const [notifPrompt,setNotifPrompt]=useState(typeof Notification!=='undefined'&&Notification.permission==='default');
 
   const load=async()=>{
     try{
@@ -83,9 +84,13 @@ export default function TripCenter(){
     finally{setLoading(false);}
   };
 
+  const enableNotifications=()=>{
+    setNotifPrompt(false);
+    if(typeof Notification!=='undefined')Notification.requestPermission().catch(()=>{});
+  };
+
   useEffect(()=>{
     load();
-    if(typeof Notification!=='undefined'&&Notification.permission==='default'){Notification.requestPermission().catch(()=>{});}
     const offTrips=base44.entities.Trip.subscribe(()=>load());
     const offExpenses=base44.entities.TripExpense.subscribe(()=>load());
     const offLocations=base44.entities.TripLocation.subscribe(()=>load());
@@ -426,7 +431,8 @@ export default function TripCenter(){
       <PullToRefresh onRefresh={load}>
       <div className="db-heading-row"><div><div className="db-eyebrow">Assigned work</div><h1>My trips</h1><p>Track hours, expenses, trip progress, location, and payment status.</p></div><button className="db-button secondary" onClick={()=>navigate('/profile')}>My profile</button></div>
       {message&&<div className="db-notice">{message}</div>}
-      <div className="db-trip-notice"><strong>Location privacy:</strong> sharing starts only after the driver checks the consent box and taps Share live location. It stops when paused, completed, or manually stopped. In this beta, the page must remain open for reliable updates.</div>
+      {notifPrompt&&<div className="db-alert pending"><div className="db-alert-icon">!</div><div style={{flex:1}}><strong>Turn on notifications?</strong><p>Get alerted the moment a new message arrives, and get a reminder if you forget to stop hour tracking.</p></div><div className="db-inline-actions"><button className="db-button secondary" onClick={()=>setNotifPrompt(false)}>Not now</button><button className="db-button" onClick={enableNotifications}>Enable</button></div></div>}
+      <div className="db-trip-notice"><strong>Location privacy:</strong> sharing starts only after the driver checks the consent box and taps Share live location. It stops when paused, completed, or manually stopped. Keep the app open in the foreground for reliable updates.</div>
       <div className="db-trip-list" ref={containerRef}>
         {trips.length?trips.map(trip=>{
           const driverSide=trip.driver_id===user.id;
@@ -442,7 +448,7 @@ export default function TripCenter(){
           return <article className="db-panel db-trip-card" key={trip.id}>
             <div className="db-trip-head"><div><span className={`db-admin-status ${trip.status==='completed'?'approved':'pending'}`}>{(trip.status||'scheduled').replace('_',' ')}</span><h2>{trip.vehicle_info||'Assigned vehicle'}</h2><p>{trip.pickup_location} → {trip.delivery_location}</p></div><div className="db-trip-clock"><strong data-trip-clock={trip.id}>{timeText(minutesFor(trip,nowRef.current))}</strong><span>tracked time</span></div></div>
             <div className="db-trip-metrics"><div><span>Accepted rate</span><strong>{money(trip.accepted_rate)}/hr</strong></div><div><span>Funding</span><strong>{trip.funding_status==='confirmed'?money(trip.funded_amount):trip.funding_status==='released'?'Released':trip.funding_status==='refunded'?'Refunded':'Pending'}</strong></div><div><span>Expenses</span><strong>{money(expenseTotal)}</strong></div><div><span>Tip</span><strong>{money(tipValue)}</strong></div><div><span>Total {trip.status==='completed'?'due':'estimate'}</span><strong style={{color:'var(--db-green)'}}>{money(grandTotal)}</strong></div><div><span>{driverSide?'Broker':'Driver'}</span><strong>{driverSide?trip.broker_name:trip.driver_name}</strong></div></div>
-            <div className={`db-alert ${trip.funding_status==='confirmed'||trip.funding_status==='released'?'':'pending'}`}><div className="db-alert-icon">{trip.funding_status==='confirmed'||trip.funding_status==='released'?'✓':'!'}</div><div><strong>{trip.funding_status==='confirmed'?'Funding confirmed':trip.funding_status==='released'?'Funding released':'Funding required before departure'}</strong><p>{trip.funding_status==='confirmed'? `${money(trip.funded_amount)} is reserved in the Relay beta wallet for this trip.`:trip.funding_status==='released'?'The reserved amount has been applied to payment.':'The driver cannot start until the broker reserves the estimated labor amount.'}</p></div></div>
+            <div className={`db-alert ${trip.funding_status==='confirmed'||trip.funding_status==='released'?'':'pending'}`}><div className="db-alert-icon">{trip.funding_status==='confirmed'||trip.funding_status==='released'?'✓':'!'}</div><div><strong>{trip.funding_status==='confirmed'?'Funding confirmed':trip.funding_status==='released'?'Funding released':'Funding required before departure'}</strong><p>{trip.funding_status==='confirmed'? `${money(trip.funded_amount)} is reserved in the Relay wallet for this trip.`:trip.funding_status==='released'?'The reserved amount has been applied to payment.':'The driver cannot start until the broker reserves the estimated labor amount.'}</p></div></div>
             {driverSide?<div className="db-trip-controls">
               {trip.status==='scheduled'&&!trip.pickup_condition_acknowledged&&<button className="db-button secondary" onClick={()=>{setPickupTrip(trip);setPickup({pickup_odometer:trip.pickup_odometer??'',pickup_photo:null,pickup_condition_notes:trip.pickup_condition_notes||'',pickup_condition_acknowledged:false})}}>Record pickup condition</button>}
               {['scheduled','paused'].includes(trip.status)&&<button className="db-button" disabled={saving===trip.id||trip.funding_status!=='confirmed'||!trip.pickup_condition_acknowledged} onClick={()=>startHours(trip)}>Start tracking hours</button>}

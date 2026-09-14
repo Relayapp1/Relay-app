@@ -84,8 +84,8 @@ export default function MobileTabBar() {
         const Icon = t.icon;
         const active = tabForPath(location.pathname) === t.to;
         return (
-          <a key={t.to} className={active ? 'active' : ''} onClick={(e) => { e.preventDefault(); handleTabClick(t.to); }}>
-            <Icon />
+          <a key={t.to} href={t.to} className={active ? 'active' : ''} aria-current={active ? 'page' : undefined} aria-label={t.label} onClick={(e) => { e.preventDefault(); handleTabClick(t.to); }}>
+            <Icon aria-hidden="true" />
             {t.label}
           </a>
         );

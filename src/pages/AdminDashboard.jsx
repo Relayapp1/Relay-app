@@ -186,7 +186,7 @@ export default function AdminDashboard(){
     setSaving(`${entity}-info-${record.id}`);
     try{
       const name=record.full_name||record.company||'applicant';
-      await base44.integrations.Core.SendEmail({to:record.email,subject:'Additional information needed — DriveBid application',body:`Hi ${name},\n\nThanks for applying to join DriveBid. Before we can finish reviewing your ${entity.toLowerCase()} application, we need a little more information. Please reply with any missing license or document details, or clarifications on your application.\n\nOnce we receive it, we'll continue your review right away.\n\n— DriveBid Review Team`});
+      await base44.integrations.Core.SendEmail({to:record.email,subject:'Additional information needed — Relay application',body:`Hi ${name},\n\nThanks for applying to join Relay. Before we can finish reviewing your ${entity.toLowerCase()} application, we need a little more information. Please reply with any missing license or document details, or clarifications on your application.\n\nOnce we receive it, we'll continue your review right away.\n\n— Relay Review Team`});
       setError(`Information request sent to ${record.email}`);
     }catch(err){setError(err.message||'Could not send information request');}
     finally{setSaving('');}
@@ -253,7 +253,7 @@ export default function AdminDashboard(){
       <button onClick={()=>base44.auth.logout(window.location.origin+'/login')}>Sign out</button>
     </div>}
     <main className="db-page">
-      <div className="db-heading-row"><div><div className="db-eyebrow">Owner control center</div><h1>Admin dashboard</h1><p>Review approvals and monitor the full Relay beta.</p></div><div style={{display:'flex',gap:10,flexWrap:'wrap'}}>{isDriveBidOwner(me)&&me?.account_type==='broker'&&<button className="db-button secondary" onClick={removeBrokerRole}>Remove my broker role</button>}<button className="db-button secondary" onClick={refreshData} disabled={refreshing}>{refreshing?'Refreshing…':'Refresh data'}</button></div></div>
+      <div className="db-heading-row"><div><div className="db-eyebrow">Owner control center</div><h1>Admin dashboard</h1><p>Review approvals and monitor the full Relay marketplace.</p></div><div style={{display:'flex',gap:10,flexWrap:'wrap'}}>{isDriveBidOwner(me)&&me?.account_type==='broker'&&<button className="db-button secondary" onClick={removeBrokerRole}>Remove my broker role</button>}<button className="db-button secondary" onClick={refreshData} disabled={refreshing}>{refreshing?'Refreshing…':'Refresh data'}</button></div></div>
       {error&&<div className="db-notice">{error}</div>}
       <div className="db-admin-tabs">{tabs.map(([key,label])=><button key={key} className={tab===key?'active':''} onClick={()=>setTab(key)}>{label}</button>)}</div>
 

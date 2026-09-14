@@ -79,7 +79,7 @@ export default function WalletPanel({ user }) {
               <Field label="Add funds ($)" full><input type="number" min="1" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" required /></Field>
             </div>
             <div className="db-form-actions"><button className="db-button" disabled={saving}>{saving ? 'Submitting…' : 'Request deposit'}</button></div>
-            <div className="db-notice" style={{ marginTop: 8 }}>In this beta, an admin confirms each deposit. Real card payments are coming soon.</div>
+            <div className="db-notice" style={{ marginTop: 8 }}>An admin confirms each deposit. Real card payments are coming soon.</div>
           </form>
         ) : (
           <form className="db-form" onSubmit={withdraw}>
@@ -96,7 +96,7 @@ export default function WalletPanel({ user }) {
               <Field label="Routing number" full><input value={bank.bank_routing} onChange={e => setBank({ ...bank, bank_routing: e.target.value })} required /></Field>
             </div>
             <div className="db-form-actions"><button className="db-button" disabled={saving}>{saving ? 'Submitting…' : speed === 'instant' ? `Request instant withdrawal (+$${INSTANT_FEE.toFixed(2)})` : 'Request withdrawal'}</button></div>
-            <div className="db-notice" style={{ marginTop: 8 }}>{speed === 'instant' ? `An admin still processes every transfer in this beta — instant requests are just flagged for priority review, and carry a $${INSTANT_FEE.toFixed(2)} fee. Real automated instant payouts are coming soon.` : 'An admin processes your bank transfer.'}</div>
+            <div className="db-notice" style={{ marginTop: 8 }}>{speed === 'instant' ? `An admin still processes every transfer — instant requests are just flagged for priority review, and carry a $${INSTANT_FEE.toFixed(2)} fee. Real automated instant payouts are coming soon.` : 'An admin processes your bank transfer.'}</div>
           </form>
         )}
         <div className="db-mini-title" style={{ marginTop: 18 }}>Transaction history</div>

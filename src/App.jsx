@@ -31,10 +31,12 @@ function OwnerRoute({children}){
 function AuthenticatedApp(){
   const {isLoadingAuth,isLoadingPublicSettings,authError,navigateToLogin}=useAuth();
   const location=useLocation();
-  if(isLoadingPublicSettings||isLoadingAuth)return <div className="db-loading"><div><div className="db-spinner"/><span>Loading DriveBid…</span></div></div>;
+  if(isLoadingPublicSettings||isLoadingAuth)return <div className="db-loading"><div><div className="db-spinner"/><span>Loading Relay…</span></div></div>;
   if(authError){
     if(authError.type==='user_not_registered')return <UserNotRegisteredError/>;
     if(authError.type==='auth_required'){navigateToLogin();return null;}
+    const offline=typeof navigator!=='undefined'&&navigator.onLine===false;
+    return <div className="db-shell"><main className="db-page" style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'80vh'}}><div className="db-panel db-admin-denied"><h1>{offline?"You're offline":'Something went wrong'}</h1><p>{offline?'Relay needs an internet connection. Check your connection and try again.':(authError.message||'We couldn’t load Relay. Please try again.')}</p><button className="db-button" onClick={()=>window.location.reload()}>Retry</button></div></main></div>;
   }
   return <Suspense fallback={<div className="db-loading"><div><div className="db-spinner"/><span>Loading…</span></div></div>}><AnimatePresence mode="wait"><motion.div key={location.pathname} initial={{opacity:0,x:15}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-15}} transition={{duration:0.2,ease:'easeOut'}}><Routes location={location}>
     <Route path="/login" element={<Login/>}/>

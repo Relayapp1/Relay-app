@@ -12,13 +12,13 @@ import { approveTransaction, rejectTransaction, refundTripFunding, money } from 
 const dateText=(value)=>value?new Date(value).toLocaleDateString():'—';
 const statusClass=(status)=>`db-admin-status ${status||'pending'}`;
 const PAGE_SIZE=100;
-const ENTITY_KEYS=['users','brokers','drivers','deals','bids','trips','reviews','walletTxns','wallets'];
-const ENTITY_NAMES={users:'User',brokers:'Broker',drivers:'Driver',deals:'Deal',bids:'Bid',trips:'Trip',reviews:'Review',walletTxns:'WalletTransaction',wallets:'Wallet'};
+const ENTITY_KEYS=['users','brokers','drivers','deals','bids','trips','reviews','walletTxns','wallets','incidents'];
+const ENTITY_NAMES={users:'User',brokers:'Broker',drivers:'Driver',deals:'Deal',bids:'Bid',trips:'Trip',reviews:'Review',walletTxns:'WalletTransaction',wallets:'Wallet',incidents:'TripIncident'};
 
 export default function AdminDashboard(){
   const navigate=useNavigate();
   const [me,setMe]=useState(null);
-  const [data,setData]=useState({users:[],brokers:[],drivers:[],deals:[],bids:[],trips:[],reviews:[],walletTxns:[],wallets:[]});
+  const [data,setData]=useState({users:[],brokers:[],drivers:[],deals:[],bids:[],trips:[],reviews:[],walletTxns:[],wallets:[],incidents:[]});
   const [tab,setTab]=useState('overview');
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState('');
@@ -30,6 +30,8 @@ export default function AdminDashboard(){
   const [menu,setMenu]=useState(false);
   const [hasMore,setHasMore]=useState({});
   const [loadingMore,setLoadingMore]=useState(false);
+  const [resolvingIncident,setResolvingIncident]=useState(null);
+  const [resolutionText,setResolutionText]=useState('');
 
   const load=async()=>{
     setError('');
@@ -195,6 +197,17 @@ export default function AdminDashboard(){
   const rejectWalletTxn=async(id)=>{setSaving(`wallet-${id}`);try{await rejectTransaction(id);await load();}catch(err){setError(err.message||'Could not reject');}finally{setSaving('');}};
   const pendingWallet=data.walletTxns.filter(x=>x.status==='pending').sort((a,b)=>(b.speed==='instant'?1:0)-(a.speed==='instant'?1:0));
   const userNameFor=(id)=>{const u=data.users.find(x=>x.id===id);return u?.full_name||u?.email||(data.drivers.find(d=>d.created_by_id===id)?.full_name)||'User';};
+  const disputedTrips=data.trips.filter(t=>t.delivery_review_status==='disputed');
+  const openIncidents=data.incidents.filter(i=>i.status!=='resolved');
+  const resolveIncident=async(incident)=>{
+    if(!resolutionText.trim()){setError('Add resolution notes before closing this incident.');return;}
+    setSaving(`incident-${incident.id}`);
+    try{
+      await base44.entities.TripIncident.update(incident.id,{status:'resolved',resolution_notes:resolutionText.trim(),resolved_at:new Date().toISOString()});
+      setResolvingIncident(null);setResolutionText('');await load();
+    }catch(err){setError(err.message||'Could not resolve incident');}
+    finally{setSaving('');}
+  };
 
   const pendingBrokers=data.brokers.filter(x=>x.status==='pending'||!x.status);
   const pendingDrivers=data.drivers.filter(x=>x.status==='pending'||!x.status);
@@ -221,6 +234,7 @@ export default function AdminDashboard(){
     ['jobs',`Jobs (${data.deals.length})`],
     ['bids',`Bids (${data.bids.length})`],
     ['trips',`Trips (${data.trips.length})`],
+    ['disputes',`Disputes (${disputedTrips.length+openIncidents.length})`],
     ['wallet',`Wallet (${pendingWallet.length})`]
   ];
 
@@ -322,6 +336,25 @@ export default function AdminDashboard(){
       </div>}
 
       {tab==='trips'&&<div className="db-panel db-admin-table-wrap">{data.trips.length?<table className="db-admin-table"><thead><tr><th>Driver</th><th>Broker</th><th>Vehicle</th><th>Route</th><th>Status</th><th>Payment</th><th>Tracked</th><th></th></tr></thead><tbody>{data.trips.map(trip=>(<tr key={trip.id} style={{cursor:'pointer'}} onClick={()=>setSelectedTrip(trip)}><td>{trip.driver_name||'—'}</td><td>{trip.broker_name||'—'}</td><td>{trip.vehicle_info||'—'}</td><td>{trip.pickup_location||'—'} → {trip.delivery_location||'—'}</td><td><span className={`db-admin-status ${trip.status==='completed'?'approved':trip.status==='cancelled'?'rejected':'pending'}`}>{trip.status||'—'}</span></td><td>{trip.payment_status||'—'}</td><td>{Number(trip.tracked_minutes||0).toFixed(0)}m</td><td><button className="db-small-btn" onClick={e=>{e.stopPropagation();setSelectedTrip(trip);}}>View</button></td></tr>))}</tbody></table>:<div className="db-empty"><strong>No trips yet</strong>Trips appear when a broker accepts a driver's bid.</div>}</div>}
+
+      {tab==='disputes'&&<div className="db-admin-sections">
+        <ApprovalSection title="Disputed trips" empty="No open trip disputes." records={disputedTrips} countLabel="disputed" render={(trip)=><ApprovalCard key={trip.id} title={trip.vehicle_info||'Trip'} subtitle={`${trip.pickup_location||'—'} → ${trip.delivery_location||'—'}`} status="disputed" onClick={()=>setSelectedTrip(trip)}>
+          <Info label="Driver" value={trip.driver_name}/>
+          <Info label="Broker" value={trip.broker_name}/>
+          <Info label="Dispute reason" value={trip.dispute_reason}/>
+          <Info label="Opened" value={dateText(trip.dispute_opened_at)}/>
+          <div className="db-inline-actions db-admin-actions" onClick={e=>e.stopPropagation()}><button className="db-button" onClick={()=>setSelectedTrip(trip)}>Review & resolve</button></div>
+        </ApprovalCard>}/>
+        <ApprovalSection title="Open incident reports" empty="No open incident reports." records={openIncidents} countLabel="open" render={(incident)=><article className="db-panel db-admin-card" key={incident.id}>
+          <div className="db-admin-card-head"><div><h3>{(incident.category||'other').replace('_',' ')}</h3><p>{userNameFor(incident.reporter_id)} ({incident.reporter_role}) · Trip {(incident.trip_id||'').slice(0,8)}</p></div><span className={`db-admin-status ${incident.status==='resolved'?'approved':incident.status==='reviewing'?'pending':''}`}>{incident.status}</span></div>
+          <p className="db-job-meta" style={{margin:'0 0 12px'}}>{incident.description}</p>
+          {incident.photo&&<div className="db-admin-docs"><button className="db-link-btn" onClick={()=>openDocument(incident.photo)}>Photo</button></div>}
+          {resolvingIncident===incident.id?<div className="db-form" style={{marginTop:12}}>
+            <div className="db-field full"><label>Resolution notes</label><textarea value={resolutionText} onChange={e=>setResolutionText(e.target.value)} required/></div>
+            <div className="db-form-actions"><button type="button" className="db-button secondary" onClick={()=>{setResolvingIncident(null);setResolutionText('');}}>Cancel</button><button className="db-button" disabled={saving===`incident-${incident.id}`} onClick={()=>resolveIncident(incident)}>{saving===`incident-${incident.id}`?'Saving…':'Mark resolved'}</button></div>
+          </div>:<div className="db-inline-actions db-admin-actions"><button className="db-button" disabled={Boolean(saving)} onClick={()=>{setResolvingIncident(incident.id);setResolutionText(incident.resolution_notes||'');}}>Resolve</button></div>}
+        </article>}/>
+      </div>}
 
       {tab==='users'&&<Table headers={['Name','Email','Account type','Platform role','Joined']} rows={data.users.map(user=>[
         user.full_name||'—',user.email||'—',user.account_type||'Not selected',user.role||'user',dateText(user.created_date)

@@ -6,6 +6,7 @@
       "enum": [
         "broker",
         "driver",
+        "individual",
         "admin"
       ],
       "type": "string"

@@ -63,10 +63,21 @@ export default function ApplicantProfileModal({ applicant, trips, deals, reviews
             </>
           ) : (
             <>
-              <Row label="Company" value={record.company} />
-              <Row label="MC number" value={record.mc_number} />
-              <Row label="Business address" value={record.business_address} />
+              <Row label="Poster type" value={record.poster_type === 'individual' ? 'Individual' : 'Business'} />
+              {record.poster_type !== 'individual' && <>
+                <Row label="Company" value={record.company} />
+                <Row label="MC number" value={record.mc_number} />
+                <Row label="Business address" value={record.business_address} />
+              </>}
               <Row label="Rating" value={record.rating ? `${Number(record.rating).toFixed(1)} / 5` : null} />
+              <div className="db-mini-title">Documents</div>
+              <div className="db-admin-docs">
+                {record.poster_type === 'individual'
+                  ? (record.government_id_document ? <button className="db-link-btn" onClick={() => openDocument(record.government_id_document)}>Government ID</button> : <span style={{ fontSize: 13, color: 'var(--db-muted)' }}>No documents uploaded</span>)
+                  : (record.w9_document || record.broker_license_document
+                      ? <>{record.w9_document && <button className="db-link-btn" onClick={() => openDocument(record.w9_document)}>W-9</button>}{record.broker_license_document && <button className="db-link-btn" onClick={() => openDocument(record.broker_license_document)}>Broker license</button>}</>
+                      : <span style={{ fontSize: 13, color: 'var(--db-muted)' }}>No documents uploaded</span>)}
+              </div>
               <div className="db-mini-title">Broker dashboard</div>
               <Row label="Open jobs" value={openDeals} />
               <Row label="Completed jobs" value={completedDeals} />

@@ -268,9 +268,9 @@ export default function AdminDashboard(){
 
       {tab==='approvals'&&<div className="db-admin-sections">
         <div className="db-chips">{['pending','approved','rejected','all'].map(f=><button key={f} className="db-link-btn" style={approvalFilter===f?{background:'var(--db-navy)',color:'white'}:{}} onClick={()=>setApprovalFilter(f)}>{f[0].toUpperCase()+f.slice(1)}</button>)}</div>
-        <ApprovalSection title="Broker applications" empty="No broker applications are waiting." records={filteredBrokers} render={(broker)=><ApprovalCard key={broker.id} title={broker.company||broker.full_name||'Broker'} subtitle={broker.email} status={broker.status} onClick={()=>setSelected({entity:'Broker',record:broker})}>
-          <Info label="Contact" value={formatPhone(broker.phone)}/><Info label="MC number" value={broker.mc_number}/><Info label="Address" value={broker.business_address}/><Info label="Jobs posted" value={brokerDealsFor(broker).length}/><Info label="Rating" value={broker.rating?`${Number(broker.rating).toFixed(1)}/5`:null}/>
-          <div className="db-admin-docs">{broker.w9_document&&<button className="db-link-btn" onClick={()=>openDocument(broker.w9_document)}>W-9</button>}{broker.broker_license_document&&<button className="db-link-btn" onClick={()=>openDocument(broker.broker_license_document)}>Broker license</button>}</div>
+        <ApprovalSection title="Broker & individual applications" empty="No applications are waiting." records={filteredBrokers} render={(broker)=><ApprovalCard key={broker.id} title={broker.company||broker.full_name||'Broker'} subtitle={broker.email} status={broker.status} onClick={()=>setSelected({entity:'Broker',record:broker})}>
+          <Info label="Poster type" value={broker.poster_type==='individual'?'Individual':'Business'}/><Info label="Contact" value={formatPhone(broker.phone)}/>{broker.poster_type!=='individual'&&<><Info label="MC number" value={broker.mc_number}/><Info label="Address" value={broker.business_address}/></>}<Info label="Jobs posted" value={brokerDealsFor(broker).length}/><Info label="Rating" value={broker.rating?`${Number(broker.rating).toFixed(1)}/5`:null}/>
+          <div className="db-admin-docs">{broker.poster_type==='individual'?broker.government_id_document&&<button className="db-link-btn" onClick={()=>openDocument(broker.government_id_document)}>Government ID</button>:<>{broker.w9_document&&<button className="db-link-btn" onClick={()=>openDocument(broker.w9_document)}>W-9</button>}{broker.broker_license_document&&<button className="db-link-btn" onClick={()=>openDocument(broker.broker_license_document)}>Broker license</button>}</>}</div>
           <ApprovalActions busy={saving===`Broker-${broker.id}`} status={broker.status||'pending'} onApprove={()=>updateStatus('Broker',broker,'approved')} onReject={()=>updateStatus('Broker',broker,'rejected')}/>
         </ApprovalCard>}/>
         <ApprovalSection title="Driver applications" empty="No driver applications are waiting." records={filteredDrivers} render={(driver)=><ApprovalCard key={driver.id} title={driver.full_name||'Driver'} subtitle={driver.email} status={driver.status} onClick={()=>setSelected({entity:'Driver',record:driver})}>
@@ -303,14 +303,19 @@ export default function AdminDashboard(){
       </div>}
 
       {tab==='brokers'&&<div className="db-admin-sections">
-        <ApprovalSection title="All brokers" empty="No brokers yet." records={data.brokers} countLabel="brokers" render={(broker)=><ApprovalCard key={broker.id} title={broker.company||broker.full_name||'Broker'} subtitle={broker.email} status={broker.status} onClick={()=>setSelected({entity:'Broker',record:broker})}>
+        <ApprovalSection title="All brokers & individuals" empty="No brokers or individuals yet." records={data.brokers} countLabel="posters" render={(broker)=><ApprovalCard key={broker.id} title={broker.company||broker.full_name||'Broker'} subtitle={broker.email} status={broker.status} onClick={()=>setSelected({entity:'Broker',record:broker})}>
+          <Info label="Poster type" value={broker.poster_type==='individual'?'Individual':'Business'}/>
           <Info label="Contact" value={formatPhone(broker.phone)}/>
-          <Info label="Company" value={broker.company}/>
+          {broker.poster_type!=='individual'&&<Info label="Company" value={broker.company}/>}
           <Info label="Jobs posted" value={brokerDealsFor(broker).length}/>
           <Info label="Rating" value={broker.rating?`${Number(broker.rating).toFixed(1)}/5`:null}/>
           <div className="db-admin-docs" onClick={e=>e.stopPropagation()}>
-            {broker.w9_document&&<button className="db-link-btn" onClick={()=>openDocument(broker.w9_document)}>W-9</button>}
-            {broker.broker_license_document&&<button className="db-link-btn" onClick={()=>openDocument(broker.broker_license_document)}>Broker license</button>}
+            {broker.poster_type==='individual'?
+              broker.government_id_document&&<button className="db-link-btn" onClick={()=>openDocument(broker.government_id_document)}>Government ID</button>
+            :<>
+              {broker.w9_document&&<button className="db-link-btn" onClick={()=>openDocument(broker.w9_document)}>W-9</button>}
+              {broker.broker_license_document&&<button className="db-link-btn" onClick={()=>openDocument(broker.broker_license_document)}>Broker license</button>}
+            </>}
           </div>
           <LifecycleActions busy={saving===`Broker-${broker.id}`} status={broker.status||'pending'} onApprove={()=>updateStatus('Broker',broker,'approved')} onReject={()=>updateStatus('Broker',broker,'rejected')} onSuspend={()=>updateStatus('Broker',broker,'suspended')} onReinstate={()=>updateStatus('Broker',broker,'approved')}/>
         </ApprovalCard>}/>

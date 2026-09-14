@@ -4,7 +4,7 @@ export const money = (value) => `$${Number(value || 0).toFixed(2)}`;
 
 export async function getWallet(user) {
   if (!user) return null;
-  const role = user.account_type === 'broker' ? 'broker' : 'driver';
+  const role = user.account_type === 'driver' ? 'driver' : 'broker';
   const existing = await base44.entities.Wallet.filter({ user_id: user.id }, '-created_date', 1);
   if (existing[0]) return existing[0];
   return await base44.entities.Wallet.create({ user_id: user.id, role, balance: 0, pending_deposits: 0, pending_withdrawals: 0 });

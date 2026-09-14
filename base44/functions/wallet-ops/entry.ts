@@ -8,7 +8,7 @@ export default async function(req: Request): Promise<Response> {
 
     const body = await req.json();
     const action = body.action;
-    const role = user.account_type === "broker" ? "broker" : "driver";
+    const role = user.account_type === "driver" ? "driver" : "broker";
     const admin = user.role === "admin";
 
     const getWallet = async (uid: string, wrole: string) => {

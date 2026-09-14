@@ -32,7 +32,7 @@ export default function AccountProfile(){
     try{
       let current=await base44.auth.me();
       const pendingRole=sessionStorage.getItem('drivebid_signup_role');
-      if(pendingRole&&['driver','broker'].includes(pendingRole)){
+      if(pendingRole&&['driver','broker','individual'].includes(pendingRole)){
         current=await base44.auth.updateMe({account_type:pendingRole});
         sessionStorage.removeItem('drivebid_signup_role');
       }
@@ -47,13 +47,13 @@ export default function AccountProfile(){
           setMessage('A confirmation link was sent to your email.');
         }catch(error){setMessage(error?.response?.data?.error||error.message||'Use the button below to send your verification link.');}
       }
-      const isBroker=current.account_type==='broker';
-      const entity=isBroker?'Broker':'Driver';
+      const isPoster=current.account_type!=='driver';
+      const entity=isPoster?'Broker':'Driver';
       const [profiles,ownTrips,ownExpenses,ownDeals,ownReviews]=await Promise.all([
         base44.entities[entity].filter({created_by_id:current.id},'-created_date',1),
-        base44.entities.Trip.filter(isBroker?{broker_id:current.id}:{driver_id:current.id},'-created_date',250),
-        base44.entities.TripExpense.filter(isBroker?{broker_id:current.id}:{driver_id:current.id},'-created_date',500),
-        isBroker?base44.entities.Deal.filter({broker_id:current.id},'-created_date',500):Promise.resolve([]),
+        base44.entities.Trip.filter(isPoster?{broker_id:current.id}:{driver_id:current.id},'-created_date',250),
+        base44.entities.TripExpense.filter(isPoster?{broker_id:current.id}:{driver_id:current.id},'-created_date',500),
+        isPoster?base44.entities.Deal.filter({broker_id:current.id},'-created_date',500):Promise.resolve([]),
         base44.entities.Review.filter({reviewee_id:current.id},'-created_date',100)
       ]);
       const prof=profiles[0]||null;
@@ -71,7 +71,7 @@ export default function AccountProfile(){
       const updated=await base44.auth.updateMe({phone:form.phone,display_name:form.full_name,contact_email:form.email});
       setUser(updated);
       if(profile){
-        const entity=user.account_type==='broker'?'Broker':'Driver';
+        const entity=user.account_type!=='driver'?'Broker':'Driver';
         const saved=await base44.entities[entity].update(profile.id,{full_name:form.full_name,phone:form.phone,email:form.email,...(entity==='Driver'?{operating_area:form.operating_area}:{})});
         setProfile(saved);
         setForm({full_name:saved.full_name||form.full_name,email:saved.email||form.email,phone:formatPhone(form.phone),operating_area:saved.operating_area||form.operating_area||''});
@@ -111,13 +111,15 @@ export default function AccountProfile(){
     }catch(error){setMessage(error.message||'Could not open this document');}
   };
 
+  const isPoster=user?.account_type==='broker'||user?.account_type==='individual';
+  const isIndividual=user?.account_type==='individual';
   const isBroker=user?.account_type==='broker';
   const isAdmin=isDriveBidOwner(user);
   const completed=trips.filter(x=>x.status==='completed');
   const totalMinutes=trips.reduce((sum,x)=>sum+Number(x.tracked_minutes||0),0);
   const expenseTotal=expenses.filter(x=>x.status!=='rejected').reduce((sum,x)=>sum+Number(x.amount||0),0);
   const averageRating=reviews.length?reviews.reduce((sum,x)=>sum+Number(x.rating||0),0)/reviews.length:Number(profile?.rating||5);
-  const stats=isBroker?[
+  const stats=isPoster?[
     ['Jobs posted',deals.length],
     ['Jobs completed',completed.length],
     ['Payments sent',trips.filter(x=>x.payment_status==='sent').length],
@@ -129,7 +131,9 @@ export default function AccountProfile(){
     ['Average rating',`${averageRating.toFixed(1)} / 5`],
     ['Response rate',`${profile?.response_rate||100}%`]
   ];
-  const documents=isBroker?[
+  const documents=isIndividual?[
+    ['Government ID',profile?.government_id_document]
+  ]:isPoster?[
     ['W-9',profile?.w9_document],
     ["Broker's license",profile?.broker_license_document]
   ]:[
@@ -143,8 +147,8 @@ export default function AccountProfile(){
     <header className="db-topbar"><div className="db-brand"><div className="db-brandmark">R</div><span>Relay</span></div><button className="db-button secondary db-admin-back" onClick={()=>navigate(-1)}>← Back</button></header>
     <main className="db-page">
       <PullToRefresh onRefresh={load}/>
-      <div className="db-heading-row"><div><div className="db-eyebrow">{isAdmin?'Admin':isBroker?'Broker':'Driver'} account</div><h1>My profile</h1><p>Your contact information, documents, activity, and reviews.</p></div><div style={{display:'flex',gap:10,flexWrap:'wrap'}}><button className="db-button secondary" onClick={()=>navigate('/')}>Marketplace</button>{!isBroker&&<button className="db-button secondary" onClick={()=>navigate('/trips')}>My trips</button>}{isDriveBidOwner(user)&&<button className="db-button secondary" onClick={()=>navigate('/admin')}>Admin</button>}<button className="db-button danger" onClick={()=>base44.auth.logout(window.location.origin+'/login')}>Sign out</button></div></div>
-      {!profile&&!isAdmin&&<div className="db-alert pending"><div className="db-alert-icon">!</div><div><strong>{isBroker?'Broker vetting required':'Driver vetting required'}</strong><p>Your account profile is active. Complete vetting to use live marketplace features.</p></div></div>}
+      <div className="db-heading-row"><div><div className="db-eyebrow">{isAdmin?'Admin':isIndividual?'Individual':isBroker?'Broker':'Driver'} account</div><h1>My profile</h1><p>Your contact information, documents, activity, and reviews.</p></div><div style={{display:'flex',gap:10,flexWrap:'wrap'}}><button className="db-button secondary" onClick={()=>navigate('/')}>Marketplace</button>{!isPoster&&<button className="db-button secondary" onClick={()=>navigate('/trips')}>My trips</button>}{isDriveBidOwner(user)&&<button className="db-button secondary" onClick={()=>navigate('/admin')}>Admin</button>}<button className="db-button danger" onClick={()=>base44.auth.logout(window.location.origin+'/login')}>Sign out</button></div></div>
+      {!profile&&!isAdmin&&<div className="db-alert pending"><div className="db-alert-icon">!</div><div><strong>{isIndividual?'Identity verification required':isBroker?'Broker vetting required':'Driver vetting required'}</strong><p>Your account profile is active. Complete vetting to use live marketplace features.</p></div></div>}
       <section className="db-panel db-verification-panel">
         <div className="db-panel-head"><h2>Contact verification</h2><span className="db-count">Security</span></div>
         <div className="db-verification-grid">
@@ -160,8 +164,8 @@ export default function AccountProfile(){
             <Field label={isAdmin?'Admin name':isBroker?'Broker name':'Full name'} full><input required value={form.full_name} onChange={e=>setForm({...form,full_name:e.target.value})}/></Field>
             <Field label="Email address" full><input required type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></Field>
             <Field label="Phone number" full><input required value={form.phone} onChange={e=>setForm({...form,phone:formatPhone(e.target.value)})}/></Field>
-            {!isBroker&&!isAdmin&&<Field label="Public operating area" full><input required value={form.operating_area} onChange={e=>setForm({...form,operating_area:e.target.value})} placeholder="Example: NYC, Long Island, North Jersey"/></Field>}
-            {isBroker&&profile?.company&&<Field label="Company" full><input value={profile.company} readOnly/></Field>}
+            {!isPoster&&!isAdmin&&<Field label="Public operating area" full><input required value={form.operating_area} onChange={e=>setForm({...form,operating_area:e.target.value})} placeholder="Example: NYC, Long Island, North Jersey"/></Field>}
+            {profile?.company&&<Field label="Company" full><input value={profile.company} readOnly/></Field>}
           </div><div className="db-notice" style={{marginBottom:12}}>This updates the contact details on your profile. Your sign-in email is locked for security.</div><div className="db-form-actions"><button className="db-button" disabled={saving}>{saving?'Saving…':'Save information'}</button></div></form>
         </section>
         <aside className="db-panel">
@@ -185,7 +189,7 @@ export default function AccountProfile(){
       </section>
       {!isAdmin&&<WalletPanel user={user}/>}
       <div className="db-profile-layout" style={{marginTop:22}}>
-        <section className="db-panel"><div className="db-panel-head"><h2>Documents</h2>{!isAdmin&&<button className="db-link-btn" onClick={()=>navigate(isBroker?'/broker-application':'/?view=vetting')}>{profile?'Manage':'Complete vetting'}</button>}</div><div className="db-side-body">
+        <section className="db-panel"><div className="db-panel-head"><h2>Documents</h2>{!isAdmin&&<button className="db-link-btn" onClick={()=>navigate(isPoster?'/broker-application':'/?view=vetting')}>{profile?'Manage':'Complete vetting'}</button>}</div><div className="db-side-body">
           {documents.some(([,uri])=>uri)?documents.map(([label,uri])=><div className="db-document-row" key={label}><div><strong>{label}</strong><small>{uri?'Uploaded securely':'Not uploaded'}</small></div>{uri&&<button className="db-link-btn" onClick={()=>openDocument(uri)}>View</button>}</div>):<div className="db-empty"><strong>No documents uploaded</strong>Complete your vetting application to add documents.</div>}
         </div></section>
         <section className="db-panel"><div className="db-panel-head"><h2>Reviews</h2><span className="db-count">{reviews.length}</span></div><div className="db-side-body">

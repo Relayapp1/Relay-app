@@ -154,9 +154,10 @@ export default function Register() {
     >
       <div className="mb-6">
         <Label>I am joining as a</Label>
-        <div className="grid grid-cols-2 gap-2 mt-2">
+        <div className="grid grid-cols-3 gap-2 mt-2">
           <Button type="button" variant={accountType === 'driver' ? 'default' : 'outline'} onClick={() => setAccountType('driver')}>Driver</Button>
           <Button type="button" variant={accountType === 'broker' ? 'default' : 'outline'} onClick={() => setAccountType('broker')}>Broker</Button>
+          <Button type="button" variant={accountType === 'individual' ? 'default' : 'outline'} onClick={() => setAccountType('individual')}>Individual</Button>
         </div>
       </div>
       <Button

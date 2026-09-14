@@ -57,7 +57,7 @@ export default function DriveBid(){
         if(isDriveBidOwner(realMe)){navigate('/admin',{replace:true});return;}
       }
       setUser(actingUser);
-      setRole(actingUser.account_type||'driver');
+      setRole(actingUser.account_type==='driver'?'driver':'broker');
       const [allDeals,allBids,userTrips,driverList]=await Promise.all([
         base44.entities.Deal.list('-created_date',100),
         base44.entities.Bid.list('-created_date',500),
@@ -127,7 +127,7 @@ export default function DriveBid(){
       const profiles=await base44.entities.Broker.filter({created_by_id:user.id},'-created_date',1);
       const broker=profiles[0];
       if(broker?.status==='approved'){setJobModal(true);return;}
-      const hasDocs=broker&&(broker.w9_document||broker.broker_license_document);
+      const hasDocs=broker&&(broker.w9_document||broker.broker_license_document||broker.government_id_document);
       if(!broker||!hasDocs){notify('Relay is awaiting your documents to get you approved.');navigate('/broker-application');}
       else{notify('Your broker application is awaiting approval. You can explore jobs meanwhile.');}
     }catch(error){notify(error.message||'Could not verify broker approval');}
@@ -307,7 +307,7 @@ export default function DriveBid(){
       <button onClick={()=>navigate('/profile')}>My profile</button>
       {role==='driver'&&<button onClick={()=>navigate('/trips')}>My trips</button>}
       {role==='driver'&&<button onClick={()=>{setView('vetting');setMenu(false)}}>Driver application</button>}
-      {role==='broker'&&<button onClick={()=>navigate('/broker-application')}>Broker application</button>}
+      {role==='broker'&&<button onClick={()=>navigate('/broker-application')}>{user?.account_type==='individual'?'Identity verification':'Broker application'}</button>}
       {isDriveBidOwner(user)&&<button onClick={()=>navigate('/admin')}>Admin dashboard</button>}
       <button onClick={()=>base44.auth.logout(window.location.origin+'/login')}>Sign out</button>
     </div>}
@@ -316,7 +316,7 @@ export default function DriveBid(){
       <PullToRefresh onRefresh={load}>
       {impersonating&&<div className="db-trip-notice"><strong>Admin preview:</strong> You are viewing and acting as {user?.full_name||user?.email} ({role}). Changes are recorded under this account. <button className="db-link-btn" style={{marginLeft:8}} onClick={()=>navigate('/admin')}>Exit to admin</button></div>}
       {role==='driver'&&view==='vetting'?<VettingView driver={driver} progress={progress} onBack={()=>setView('jobs')} onSubmit={submitVetting} saving={saving} user={user}/>:
-      role==='broker'?<BrokerView deals={shownBrokerDeals} bids={bids} bidCount={bidCount} lowestBid={lowestBid} onPost={openPost} onView={(deal)=>{setSelected(deal);setBidsModal(true)}} activeTrips={activeTrips} completedTrips={completedTrips} pastDrivers={pastDrivers} cancelledDeals={cancelledDeals} jobCounts={brokerJobCounts} onRepost={repostDeal} onBrokerCancel={brokerCancelJob} onOpenTrip={()=>navigate('/trips')} onBookAgain={bookAgain} busy={saving}/>:
+      role==='broker'?<BrokerView deals={shownBrokerDeals} bids={bids} bidCount={bidCount} lowestBid={lowestBid} onPost={openPost} onView={(deal)=>{setSelected(deal);setBidsModal(true)}} activeTrips={activeTrips} completedTrips={completedTrips} pastDrivers={pastDrivers} cancelledDeals={cancelledDeals} jobCounts={brokerJobCounts} onRepost={repostDeal} onBrokerCancel={brokerCancelJob} onOpenTrip={()=>navigate('/trips')} onBookAgain={bookAgain} busy={saving} isIndividual={user?.account_type==='individual'}/>:
       <DriverView deals={openDeals} bidCount={bidCount} lowestBid={lowestBid} driver={driver} approved={approved} onVetting={()=>setView('vetting')} onBid={openBid} acceptedBids={acceptedBids} onCancelBid={setCancelBidTarget} busy={saving} onGoToTrips={()=>navigate('/trips')}/>}
     </PullToRefresh></main>
 
@@ -378,8 +378,8 @@ export default function DriveBid(){
   </div>;
 }
 
-function BrokerView({deals,bids,bidCount,lowestBid,onPost,onView,activeTrips,completedTrips,pastDrivers,cancelledDeals,jobCounts,onRepost,onBrokerCancel,onOpenTrip,onBookAgain,busy}){
-  return <><div className="db-heading-row"><div><div className="db-eyebrow">Broker workspace</div><h1>Delivery jobs</h1><p>Post a route, track active trips, and review drivers you've worked with.</p></div><button className="db-button" onClick={onPost}>+ Post a delivery</button></div>
+function BrokerView({deals,bids,bidCount,lowestBid,onPost,onView,activeTrips,completedTrips,pastDrivers,cancelledDeals,jobCounts,onRepost,onBrokerCancel,onOpenTrip,onBookAgain,busy,isIndividual}){
+  return <><div className="db-heading-row"><div><div className="db-eyebrow">{isIndividual?'Your workspace':'Broker workspace'}</div><h1>Delivery jobs</h1><p>Post a route, track active trips, and review drivers you've worked with.</p></div><button className="db-button" onClick={onPost}>+ Post a delivery</button></div>
   {activeTrips?.length>0&&<section className="db-panel" style={{marginBottom:22}}><div className="db-panel-head"><h2>Active trips</h2><span className="db-count">{activeTrips.length}</span></div><div className="db-side-body">{activeTrips.map(t=>{const started=t.status==='in_progress';return <div key={t.id} style={{marginBottom:12}}><div className={`db-alert ${started?'':'pending'}`} style={{marginBottom:6}}><div className="db-alert-icon">{started?'✓':'!'}</div><div><strong>{started?'Driver has started the job':'Trip assigned — waiting for driver to start'}</strong><p>{t.vehicle_info||'Vehicle'} · {t.pickup_location||'—'} → {t.delivery_location||'—'} · Driver: {t.driver_name||'—'}</p></div></div><div className="db-inline-actions"><button className="db-button secondary" onClick={()=>onOpenTrip(t)}>View details</button><button className="db-button danger" disabled={busy} onClick={()=>onBrokerCancel(t)}>Cancel job</button></div></div>;})}</div></section>}
   {completedTrips?.length>0&&<section className="db-panel" style={{marginBottom:22}}><div className="db-panel-head"><h2>Past jobs</h2><span className="db-count">{completedTrips.length}</span></div><div className="db-side-body">{completedTrips.map(t=><div key={t.id} style={{marginBottom:12}}><div className="db-alert" style={{marginBottom:6}}><div className="db-alert-icon">✓</div><div><strong>{t.vehicle_info||'Vehicle'}</strong><p>{t.pickup_location||'—'} → {t.delivery_location||'—'} · Driver: {t.driver_name||'—'}{t.completed_at?` · ${new Date(t.completed_at).toLocaleDateString()}`:''}</p></div></div><button className="db-button secondary" onClick={()=>onOpenTrip(t)}>View details & pay</button></div>)}</div></section>}
   {cancelledDeals?.length>0&&<section className="db-panel" style={{marginBottom:22}}><div className="db-panel-head"><h2>Cancelled jobs</h2><span className="db-count">{cancelledDeals.length}</span></div><div className="db-side-body">{cancelledDeals.map(d=><div key={d.id} style={{marginBottom:12}}><div className="db-alert pending" style={{marginBottom:6}}><div className="db-alert-icon">!</div><div><strong>{d.cancelled_by==='driver'?'Driver cancelled — repost available':d.vehicle_info||'Vehicle'}</strong><p>{d.pickup_location||'—'} → {d.delivery_location||'—'} · {d.cancelled_by==='driver'?'The cancellation was recorded on the driver’s profile. Post a fresh copy to alert the load board.':'This job was cancelled and can be reposted.'}</p></div></div><button className="db-button secondary" onClick={()=>onRepost(d)}>Repost to load board</button></div>)}</div></section>}

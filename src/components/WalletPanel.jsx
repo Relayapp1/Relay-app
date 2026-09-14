@@ -11,7 +11,7 @@ export default function WalletPanel({ user }) {
   const [message, setMessage] = useState('');
   const [amount, setAmount] = useState('');
   const [bank, setBank] = useState({ bank_name: '', bank_account_last4: '', bank_routing: '' });
-  const isBroker = user?.account_type === 'broker';
+  const isBroker = user?.account_type !== 'driver';
 
   const load = async () => {
     try {

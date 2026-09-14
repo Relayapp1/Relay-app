@@ -6,6 +6,7 @@ import MobileSelect from '@/components/MobileSelect';
 import PullToRefresh from '@/components/PullToRefresh';
 import { processTripPayment, reserveTripFunding, refundTripFunding } from '@/lib/wallet';
 import { approveTripDelivery, disputeTripDelivery } from '@/lib/tripReview';
+import { submitTripReview } from '@/lib/reviews';
 import { motion } from 'framer-motion';
 
 const today=()=>new Date().toISOString().slice(0,10);
@@ -410,13 +411,8 @@ export default function TripCenter(){
 
   const submitReview=async(e)=>{
     e.preventDefault();setSaving(reviewTrip.id);
-    const driverSide=reviewTrip.driver_id===user.id;
     try{
-      await base44.entities.Review.create({
-        deal_id:reviewTrip.deal_id,trip_id:reviewTrip.id,reviewer_id:user.id,reviewer_name:user.full_name||user.email,
-        reviewer_role:driverSide?'driver':'broker',reviewee_id:driverSide?reviewTrip.broker_id:reviewTrip.driver_id,
-        reviewee_role:driverSide?'broker':'driver',rating:Number(review.rating),comment:review.comment
-      });
+      await submitTripReview(reviewTrip,Number(review.rating),review.comment);
       setReviewTrip(null);setReview({rating:5,comment:''});setMessage('Review submitted.');await load();
     }catch(error){setMessage(error.message||'Could not submit review');}
     finally{setSaving('');}

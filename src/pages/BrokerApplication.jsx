@@ -57,6 +57,7 @@ export default function BrokerApplication(){
         <section className="db-panel"><div className="db-panel-head"><h2>Company information</h2></div><form className="db-form" onSubmit={submit}><div className="db-form-grid">
           <Field label="Company name" full><input required value={form.company} onChange={e=>setForm({...form,company:e.target.value})}/></Field>
           <Field label="Contact phone"><input required value={form.phone} onChange={e=>setForm({...form,phone:formatPhone(e.target.value)})}/></Field>
+          <Field label="MC number (optional)"><input value={form.mc_number} onChange={e=>setForm({...form,mc_number:e.target.value})}/></Field>
           <Field label="Business address" full><input value={form.business_address} onChange={e=>setForm({...form,business_address:e.target.value})}/></Field>
           <Field label="W-9 (required)" full><input name="w9_document" type="file" accept=".pdf,image/*" required={!profile?.w9_document}/><small>{profile?.w9_document?'A W-9 is already stored securely. Upload a file only to replace it.':'PDF or image. Stored privately for administrator review.'}</small></Field>
           <Field label="Broker’s license (optional)" full><input name="broker_license_document" type="file" accept=".pdf,image/*"/><small>{profile?.broker_license_document?'A broker license is already stored securely.':'Optional supporting document.'}</small></Field>

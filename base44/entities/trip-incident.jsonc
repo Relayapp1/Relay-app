@@ -1,0 +1,110 @@
+{
+  "name": "TripIncident",
+  "type": "object",
+  "properties": {
+    "trip_id": {
+      "type": "string"
+    },
+    "broker_id": {
+      "type": "string"
+    },
+    "driver_id": {
+      "type": "string"
+    },
+    "reporter_id": {
+      "type": "string"
+    },
+    "reporter_role": {
+      "type": "string",
+      "enum": [
+        "driver",
+        "broker",
+        "admin"
+      ]
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "vehicle_condition",
+        "delay",
+        "documentation",
+        "expense",
+        "payment",
+        "other"
+      ]
+    },
+    "description": {
+      "type": "string"
+    },
+    "photo": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "reviewing",
+        "resolved"
+      ],
+      "default": "open"
+    },
+    "resolution_notes": {
+      "type": "string"
+    },
+    "resolved_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "trip_id",
+    "broker_id",
+    "driver_id",
+    "reporter_id",
+    "reporter_role",
+    "category",
+    "description"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "data.driver_id": "{{user.id}}"
+        },
+        {
+          "data.broker_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "data.driver_id": "{{user.id}}"
+        },
+        {
+          "data.broker_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

@@ -1,0 +1,590 @@
+{
+  "name": "Trip",
+  "properties": {
+    "accepted_rate": {
+      "type": "number"
+    },
+    "bid_id": {
+      "type": "string"
+    },
+    "broker_id": {
+      "type": "string"
+    },
+    "broker_name": {
+      "type": "string"
+    },
+    "cancelled_by": {
+      "enum": [
+        "driver",
+        "broker"
+      ],
+      "type": "string"
+    },
+    "cancelled_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "cancellation_fee_status": {
+      "enum": [
+        "not_applicable",
+        "policy_pending",
+        "assessed",
+        "waived",
+        "paid"
+      ],
+      "type": "string"
+    },
+    "completed_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "current_latitude": {
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.driver_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "number"
+    },
+    "current_longitude": {
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.driver_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "number"
+    },
+    "deal_id": {
+      "type": "string"
+    },
+    "delivery_location": {
+      "type": "string"
+    },
+    "estimated_hours": {
+      "type": "number"
+    },
+    "return_plan": {
+      "type": "string"
+    },
+    "job_notes": {
+      "type": "string"
+    },
+    "driver_id": {
+      "type": "string"
+    },
+    "driver_name": {
+      "type": "string"
+    },
+    "last_location_at": {
+      "format": "date-time",
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.driver_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "string"
+    },
+    "location_active": {
+      "default": false,
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.driver_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "boolean"
+    },
+    "location_consent": {
+      "default": false,
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.driver_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "boolean"
+    },
+    "funding_status": {
+      "default": "pending",
+      "enum": [
+        "pending",
+        "confirmed",
+        "released",
+        "refunded"
+      ],
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      },
+      "type": "string"
+    },
+    "funded_amount": {
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      },
+      "type": "number"
+    },
+    "funded_at": {
+      "format": "date-time",
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      },
+      "type": "string"
+    },
+    "payment_method": {
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.broker_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "string"
+    },
+    "payment_status": {
+      "default": "pending",
+      "enum": [
+        "pending",
+        "sent",
+        "received"
+      ],
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.broker_id": "{{user.id}}"
+            },
+            {
+              "data.driver_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "string"
+    },
+    "pickup_location": {
+      "type": "string"
+    },
+    "pickup_date": {
+      "format": "date",
+      "type": "string"
+    },
+    "pickup_time": {
+      "type": "string"
+    },
+    "pickup_photo": {
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.driver_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "string"
+    },
+    "pickup_condition_acknowledged": {
+      "default": false,
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.driver_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "boolean"
+    },
+    "pickup_condition_notes": {
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.driver_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "string"
+    },
+    "delivery_condition_acknowledged": {
+      "default": false,
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.driver_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "boolean"
+    },
+    "delivery_condition_notes": {
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.driver_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "string"
+    },
+    "delivery_review_status": {
+      "default": "pending",
+      "enum": [
+        "pending",
+        "approved",
+        "disputed",
+        "resolved"
+      ],
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      },
+      "type": "string"
+    },
+    "broker_reviewed_at": {
+      "format": "date-time",
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      },
+      "type": "string"
+    },
+    "dispute_reason": {
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      },
+      "type": "string"
+    },
+    "dispute_opened_at": {
+      "format": "date-time",
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      },
+      "type": "string"
+    },
+    "dispute_resolution": {
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      },
+      "type": "string"
+    },
+    "dispute_resolved_at": {
+      "format": "date-time",
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      },
+      "type": "string"
+    },
+    "delivery_photo": {
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.driver_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "string"
+    },
+    "pickup_odometer": {
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.driver_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "number"
+    },
+    "delivery_odometer": {
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.driver_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "number"
+    },
+    "pickup_confirmed_at": {
+      "format": "date-time",
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.driver_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "string"
+    },
+    "delivery_confirmed_at": {
+      "format": "date-time",
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.driver_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "string"
+    },
+    "started_on_time": {
+      "type": "boolean"
+    },
+    "started_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "status": {
+      "default": "scheduled",
+      "enum": [
+        "scheduled",
+        "in_progress",
+        "paused",
+        "completed",
+        "cancelled"
+      ],
+      "type": "string"
+    },
+    "timer_started_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "tip_amount": {
+      "default": 0,
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.broker_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "number"
+    },
+    "tracked_minutes": {
+      "default": 0,
+      "type": "number"
+    },
+    "vehicle_info": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "deal_id",
+    "bid_id",
+    "broker_id",
+    "driver_id",
+    "accepted_rate"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "data.broker_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.broker_id": "{{user.id}}"
+        },
+        {
+          "data.driver_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "data.broker_id": "{{user.id}}"
+        },
+        {
+          "data.driver_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  },
+  "type": "object"
+}

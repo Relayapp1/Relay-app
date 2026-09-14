@@ -1,0 +1,128 @@
+{
+  "name": "TripExpense",
+  "properties": {
+    "amount": {
+      "type": "number"
+    },
+    "broker_id": {
+      "type": "string"
+    },
+    "category": {
+      "enum": [
+        "Gas",
+        "Tolls",
+        "Parking",
+        "Food",
+        "Other"
+      ],
+      "type": "string"
+    },
+    "deal_id": {
+      "type": "string"
+    },
+    "driver_id": {
+      "type": "string"
+    },
+    "expense_date": {
+      "format": "date",
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "receipt_document": {
+      "type": "string"
+    },
+    "status": {
+      "default": "submitted",
+      "enum": [
+        "submitted",
+        "approved",
+        "rejected"
+      ],
+      "rls": {
+        "write": {
+          "$or": [
+            {
+              "data.broker_id": "{{user.id}}"
+            },
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            }
+          ]
+        }
+      },
+      "type": "string"
+    },
+    "trip_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "trip_id",
+    "deal_id",
+    "driver_id",
+    "broker_id",
+    "category",
+    "amount"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "data.driver_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "data.driver_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "data.driver_id": "{{user.id}}"
+        },
+        {
+          "data.broker_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "data.driver_id": "{{user.id}}"
+        },
+        {
+          "data.broker_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  },
+  "type": "object"
+}

@@ -1,0 +1,122 @@
+{
+  "name": "Deal",
+  "properties": {
+    "broker_id": {
+      "type": "string"
+    },
+    "broker_name": {
+      "type": "string"
+    },
+    "delivery_location": {
+      "type": "string"
+    },
+    "estimated_hours": {
+      "type": "number"
+    },
+    "is_lease_return": {
+      "default": false,
+      "type": "boolean"
+    },
+    "minimum_rate": {
+      "type": "number"
+    },
+    "payment_method": {
+      "type": "string",
+      "enum": [
+        "Relay wallet"
+      ]
+    },
+    "notes": {
+      "type": "string"
+    },
+    "pickup_date": {
+      "format": "date",
+      "type": "string"
+    },
+    "pickup_location": {
+      "type": "string"
+    },
+    "pickup_time": {
+      "type": "string"
+    },
+    "return_plan": {
+      "enum": [
+        "Lease return provided",
+        "Broker will Uber driver back",
+        "Driver arranges own return"
+      ],
+      "type": "string"
+    },
+    "status": {
+      "default": "open",
+      "enum": [
+        "open",
+        "assigned",
+        "completed",
+        "cancelled"
+      ],
+      "type": "string"
+    },
+    "target_rate": {
+      "type": "number"
+    },
+    "uber_driver_back": {
+      "default": false,
+      "type": "boolean"
+    },
+    "vehicle_info": {
+      "type": "string"
+    },
+    "assigned_driver_id": {
+      "type": "string"
+    },
+    "accepted_bid_id": {
+      "type": "string"
+    },
+    "completed_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "preferred_driver_id": {
+      "type": "string"
+    },
+    "preferred_driver_name": {
+      "type": "string"
+    },
+    "preferred_only": {
+      "default": false,
+      "type": "boolean"
+    },
+    "cancelled_by": {
+      "enum": [
+        "driver",
+        "broker"
+      ],
+      "type": "string"
+    },
+    "cancelled_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "reposted_from_deal_id": {
+      "type": "string"
+    },
+    "reposted_as_deal_id": {
+      "type": "string"
+    },
+    "reposted_at": {
+      "format": "date-time",
+      "type": "string"
+    }
+  },
+  "required": [
+    "pickup_location",
+    "delivery_location",
+    "vehicle_info",
+    "return_plan",
+    "pickup_date",
+    "estimated_hours",
+    "minimum_rate"
+  ],
+  "type": "object"
+}

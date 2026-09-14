@@ -1,0 +1,78 @@
+{
+  "name": "User",
+  "properties": {
+    "account_type": {
+      "default": "driver",
+      "enum": [
+        "broker",
+        "driver",
+        "admin"
+      ],
+      "type": "string"
+    },
+    "contact_email": {
+      "format": "email",
+      "type": "string"
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "email_link_verified": {
+      "default": false,
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      },
+      "type": "boolean"
+    },
+    "email_link_verified_at": {
+      "format": "date-time",
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      },
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "phone_verified": {
+      "default": false,
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      },
+      "type": "boolean"
+    },
+    "phone_verified_at": {
+      "format": "date-time",
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      },
+      "type": "string"
+    },
+    "role": {
+      "default": "user",
+      "enum": [
+        "admin",
+        "user"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [],
+  "type": "object"
+}

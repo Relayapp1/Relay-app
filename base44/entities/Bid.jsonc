@@ -1,0 +1,65 @@
+{
+  "name": "Bid",
+  "properties": {
+    "deal_id": {
+      "type": "string"
+    },
+    "driver_id": {
+      "type": "string"
+    },
+    "driver_name": {
+      "type": "string"
+    },
+    "driver_operating_area": {
+      "type": "string"
+    },
+    "estimated_payout": {
+      "type": "number"
+    },
+    "hourly_rate": {
+      "type": "number"
+    },
+    "driver_rating": {
+      "type": "number"
+    },
+    "completed_jobs": {
+      "type": "number"
+    },
+    "on_time_percentage": {
+      "type": "number"
+    },
+    "cancellation_rate": {
+      "type": "number"
+    },
+    "relevant_experience": {
+      "type": "string"
+    },
+    "vetting_status": {
+      "enum": [
+        "approved",
+        "pending",
+        "rejected"
+      ],
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "status": {
+      "default": "pending",
+      "enum": [
+        "pending",
+        "accepted",
+        "rejected",
+        "withdrawn"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "deal_id",
+    "driver_id",
+    "hourly_rate"
+  ],
+  "type": "object"
+}

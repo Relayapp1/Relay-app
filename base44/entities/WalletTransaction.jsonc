@@ -1,0 +1,92 @@
+{
+  "name": "WalletTransaction",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string"
+    },
+    "role": {
+      "enum": [
+        "driver",
+        "broker"
+      ],
+      "type": "string"
+    },
+    "type": {
+      "enum": [
+        "deposit",
+        "withdrawal",
+        "payment_sent",
+        "payment_received",
+        "funding_reserved",
+        "funding_refund"
+      ],
+      "type": "string"
+    },
+    "amount": {
+      "type": "number"
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "completed",
+        "rejected"
+      ],
+      "default": "pending",
+      "type": "string"
+    },
+    "trip_id": {
+      "type": "string"
+    },
+    "counterparty_id": {
+      "type": "string"
+    },
+    "bank_name": {
+      "type": "string"
+    },
+    "bank_account_last4": {
+      "type": "string"
+    },
+    "bank_routing": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "user_id",
+    "role",
+    "type",
+    "amount"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "data.user_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

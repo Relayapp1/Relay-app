@@ -4,6 +4,8 @@
 
 This is a Base44 app repository. Treat it as user-owned application code, keep changes focused on the user's request, and preserve existing project conventions.
 
+**Planned future migration:** the confirmed end-goal is to move the backend off Base44 onto Supabase (Postgres/auth/storage) with Vercel hosting. That has not started and should not be pre-abstracted for — keep using normal Base44 conventions (entities, `base44/functions`, `base44.entities.*`/`base44.functions.invoke`) for all feature work until the migration is explicitly scheduled as its own phase. See `docs/DEFERRED.md` for the full scope of what that migration will touch.
+
 Start with `README.md` for local setup, environment variables, and publish workflow.
 
 ## Base44 References

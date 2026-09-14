@@ -24,6 +24,8 @@ Things intentionally not built yet, so they don't get lost. Revisit each when it
 
 **User's current idea (not finalized):** $25 flat fee per job booked, or a $99/month subscription for frequent posters that drops the per-job fee to $5–7.
 
+**App Store / Google Play constraint discovered during the app-store-readiness review (2026-09-15):** per Base44's own submission docs, external payment processors (Stripe, and by extension the current wallet system) are allowed for *physical goods and services* — which is what the per-job fee is, since it's tied to an actual vehicle delivery, same precedent as Uber/DoorDash. But Apple and Google require their own in-app billing (StoreKit / Google Play Billing) for *digital content*, which a flat "$99/month to use the app" subscription would likely be classified as. If Relay's mobile app (the Base44-generated iOS/Android wrapper) charges that subscription through the existing Stripe-less wallet system, it risks automatic rejection. The per-job fee model is much safer to ship as-is; the subscription tier either needs to go through real IAP/Play Billing plumbing (a real, separate integration, not just "add a fee") or be sold only through the web version of the app (not the App Store / Play Store builds) — that choice needs to be made when this is designed for real, not assumed.
+
 **Revisit when:** ready to decide on final pricing/economics. Blocks: the "volume-based fee tiers" loyalty feature (Phase 3 of the roadmap) and any per-job fee UI in the wallet/checkout flow.
 
 ## Real masked phone calling

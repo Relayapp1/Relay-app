@@ -19,7 +19,8 @@
         "payment_sent",
         "payment_received",
         "funding_reserved",
-        "funding_refund"
+        "funding_refund",
+        "cancellation_fee"
       ],
       "type": "string"
     },

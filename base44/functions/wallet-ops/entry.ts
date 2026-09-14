@@ -71,6 +71,24 @@ export default async function(req: Request): Promise<Response> {
       return Response.json({ success: true, refunded: amount });
     }
 
+    if (action === "charge_cancellation_fee") {
+      const tripId = body.trip_id;
+      const trips = await base44.asServiceRole.entities.Trip.filter({ id: tripId }, "-created_date", 1);
+      const trip = trips[0];
+      if (!trip) return Response.json({ error: "Trip not found" }, { status: 404 });
+      if (trip.driver_id !== user.id && !admin) return Response.json({ error: "Not authorized for this trip" }, { status: 403 });
+      if (trip.status !== "cancelled" || trip.cancelled_by !== "driver") return Response.json({ error: "This cancellation is not fee-eligible" }, { status: 400 });
+      if (trip.cancellation_fee_status !== "policy_pending") return Response.json({ success: true, amount: Number(trip.cancellation_fee_amount || 0) });
+      const fee = Math.round(Number(trip.accepted_rate || 0) * Number(trip.estimated_hours || 0) * 0.10 * 100) / 100;
+      if (fee > 0) {
+        const driverWallet = await getWallet(trip.driver_id, "driver");
+        await base44.asServiceRole.entities.Wallet.update(driverWallet.id, { balance: Number(driverWallet.balance || 0) - fee });
+        await base44.asServiceRole.entities.WalletTransaction.create({ user_id: trip.driver_id, role: "driver", type: "cancellation_fee", amount: fee, status: "completed", trip_id: tripId, counterparty_id: trip.broker_id, notes: "10% of estimated job value, deducted from wallet (may go negative, recovered from future payouts)" });
+      }
+      await base44.asServiceRole.entities.Trip.update(tripId, { cancellation_fee_status: "assessed", cancellation_fee_amount: fee });
+      return Response.json({ success: true, amount: fee });
+    }
+
     if (action === "process_payment") {
       const tripId = body.trip_id;
       const total = Number(body.amount);

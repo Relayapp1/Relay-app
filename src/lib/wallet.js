@@ -31,6 +31,9 @@ export const reserveTripFunding = (trip, amount) =>
 export const refundTripFunding = (trip) =>
   call({ action: 'refund_funding', trip_id: trip.id });
 
+export const chargeCancellationFee = (trip) =>
+  call({ action: 'charge_cancellation_fee', trip_id: trip.id });
+
 export const processTripPayment = (trip, totalAmount) =>
   call({ action: 'process_payment', trip_id: trip.id, amount: Number(totalAmount) });
 

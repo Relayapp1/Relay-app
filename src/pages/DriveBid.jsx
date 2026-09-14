@@ -8,7 +8,7 @@ import MobileSelect from '@/components/MobileSelect';
 import PullToRefresh from '@/components/PullToRefresh';
 import TripDetailModal from '@/components/TripDetailModal';
 import { motion } from 'framer-motion';
-import { refundTripFunding } from '@/lib/wallet';
+import { refundTripFunding, chargeCancellationFee } from '@/lib/wallet';
 
 const publicDriverName=(name)=>{
   const parts=String(name||'Driver').trim().split(/\s+/).filter(Boolean);
@@ -103,7 +103,7 @@ export default function DriveBid(){
     const values=bids.filter(b=>b.deal_id===id&&b.status!=='withdrawn').map(b=>Number(b.hourly_rate)).filter(Number.isFinite);
     return values.length?Math.min(...values):null;
   };
-  const acceptedBids=bids.filter(b=>b.driver_id===user?.id&&b.status==='accepted').map(b=>({...b,deal:deals.find(d=>d.id===b.deal_id),trip:trips.find(t=>t.bid_id===b.id)}));
+  const acceptedBids=bids.filter(b=>b.driver_id===user?.id&&b.status==='accepted').map(b=>({...b,deal:deals.find(d=>d.id===b.deal_id),trip:trips.find(t=>t.bid_id===b.id)})).filter(b=>!b.trip||['scheduled','paused'].includes(b.trip.status));
   const activeTrips=trips.filter(t=>['scheduled','in_progress','paused'].includes(t.status));
   const cancelledDeals=deals.filter(d=>d.broker_id===user?.id&&d.status==='cancelled'&&!d.reposted_at);
   const brokerJobCounts={
@@ -210,16 +210,32 @@ export default function DriveBid(){
     finally{setSaving(false);}
   };
 
+  const buildRepostCopy=(deal,brokerId,brokerName)=>({broker_id:brokerId,broker_name:brokerName,vehicle_info:deal.vehicle_info,pickup_location:deal.pickup_location,delivery_location:deal.delivery_location,pickup_date:deal.pickup_date,pickup_time:deal.pickup_time,return_plan:deal.return_plan,estimated_hours:Number(deal.estimated_hours||2),minimum_rate:Number(deal.minimum_rate||deal.target_rate||20),target_rate:Number(deal.minimum_rate||deal.target_rate||20),is_lease_return:Boolean(deal.is_lease_return),uber_driver_back:Boolean(deal.uber_driver_back),notes:deal.notes||'',status:'open',preferred_driver_id:'',preferred_driver_name:'',preferred_only:false,reposted_from_deal_id:deal.id});
+
   const cancelAcceptedBid=async(b)=>{
+    if(b.trip&&!['scheduled','paused'].includes(b.trip.status)){notify('This job can no longer be cancelled from here.');return;}
     setSaving(true);
     try{
       const cancelledAt=new Date().toISOString();
+      const deal=b.deal||deals.find(d=>d.id===b.deal_id);
       await base44.entities.Bid.update(b.id,{status:'withdrawn'});
       await base44.entities.Deal.update(b.deal_id,{status:'cancelled',cancelled_by:'driver',cancelled_at:cancelledAt});
       const trips=await base44.entities.Trip.filter({bid_id:b.id},'-created_date',1);
-      if(trips[0]){await refundTripFunding(trips[0]);await base44.entities.Trip.update(trips[0].id,{status:'cancelled',cancelled_by:'driver',cancelled_at:cancelledAt,cancellation_fee_status:'policy_pending'});}
+      let feeAmount=0;
+      if(trips[0]){
+        await refundTripFunding(trips[0]);
+        await base44.entities.Trip.update(trips[0].id,{status:'cancelled',cancelled_by:'driver',cancelled_at:cancelledAt,cancellation_fee_status:'policy_pending'});
+        const feeResult=await chargeCancellationFee(trips[0]);
+        feeAmount=Number(feeResult?.amount||0);
+      }
       if(driver)await base44.entities.Driver.update(driver.id,{cancelled_trips:(driver.cancelled_trips||0)+1});
-      setCancelBidTarget(null);notify('Job cancelled. The broker has been alerted and can repost it.');await load();
+      if(deal){
+        const created=await base44.entities.Deal.create(buildRepostCopy(deal,deal.broker_id,deal.broker_name));
+        await base44.entities.Deal.update(deal.id,{reposted_at:cancelledAt,reposted_as_deal_id:created.id});
+      }
+      setCancelBidTarget(null);
+      notify(feeAmount>0?`Job cancelled and reposted for the broker. A $${feeAmount.toFixed(2)} cancellation fee was charged to your wallet.`:'Job cancelled and reposted for the broker.');
+      await load();
     }catch(error){notify(error.message||'Could not cancel');}
     finally{setSaving(false);}
   };
@@ -241,8 +257,7 @@ export default function DriveBid(){
   const repostDeal=async(deal)=>{
     setSaving(true);
     try{
-      const copy={broker_id:user.id,broker_name:user.full_name||user.email,vehicle_info:deal.vehicle_info,pickup_location:deal.pickup_location,delivery_location:deal.delivery_location,pickup_date:deal.pickup_date,pickup_time:deal.pickup_time,return_plan:deal.return_plan,estimated_hours:Number(deal.estimated_hours||2),minimum_rate:Number(deal.minimum_rate||deal.target_rate||20),target_rate:Number(deal.minimum_rate||deal.target_rate||20),is_lease_return:Boolean(deal.is_lease_return),uber_driver_back:Boolean(deal.uber_driver_back),notes:deal.notes||'',status:'open',preferred_driver_id:'',preferred_driver_name:'',preferred_only:false,reposted_from_deal_id:deal.id};
-      const created=await base44.entities.Deal.create(copy);
+      const created=await base44.entities.Deal.create(buildRepostCopy(deal,user.id,user.full_name||user.email));
       await base44.entities.Deal.update(deal.id,{reposted_at:new Date().toISOString(),reposted_as_deal_id:created.id});
       notify('A fresh copy was posted to the load board. Previous bids were not carried over.');await load();
     }catch(error){notify(error.message||'Could not repost');}
@@ -373,7 +388,7 @@ export default function DriveBid(){
         })}
       </div>
     </Modal>}
-    {cancelBidTarget&&<Modal title="Cancel accepted job?" onClose={()=>setCancelBidTarget(null)}><div className="db-form"><div className="db-alert pending"><div className="db-alert-icon">!</div><div><strong>This cancellation will be recorded</strong><p>Your cancellation rate will increase and the broker will be alerted. A cancellation fee may apply after DriveBid’s fee amount and collection policy are formally activated.</p></div></div><p className="db-job-meta">Do you want to continue cancelling this accepted job?</p><div className="db-form-actions"><button className="db-button secondary" onClick={()=>setCancelBidTarget(null)} disabled={saving}>Keep job</button><button className="db-button danger" onClick={()=>cancelAcceptedBid(cancelBidTarget)} disabled={saving}>{saving?'Cancelling…':'Yes, cancel job'}</button></div></div></Modal>}
+    {cancelBidTarget&&<Modal title="Cancel accepted job?" onClose={()=>setCancelBidTarget(null)}><div className="db-form"><div className="db-alert pending"><div className="db-alert-icon">!</div><div><strong>A cancellation fee will apply</strong><p>Your cancellation rate will increase, the broker will be alerted, and the job will be automatically reposted to the load board. A cancellation fee of approximately <strong>${(Number(cancelBidTarget.hourly_rate||0)*Number(cancelBidTarget.deal?.estimated_hours||0)*0.10).toFixed(2)}</strong> (10% of the estimated job value) will be charged to your wallet — if your balance can't cover it, it's deducted from your next payout.</p></div></div><p className="db-job-meta">Do you want to continue cancelling this accepted job?</p><div className="db-form-actions"><button className="db-button secondary" onClick={()=>setCancelBidTarget(null)} disabled={saving}>Keep job</button><button className="db-button danger" onClick={()=>cancelAcceptedBid(cancelBidTarget)} disabled={saving}>{saving?'Cancelling…':'Yes, cancel job'}</button></div></div></Modal>}
     {detailTrip&&<TripDetailModal trip={detailTrip} deals={deals} bids={bids} onClose={()=>setDetailTrip(null)} onChanged={load}/>}
     {toast&&<div className="db-toast" role="status">{toast}</div>}
   </div>;

@@ -35,6 +35,9 @@
       ],
       "type": "string"
     },
+    "cancellation_fee_amount": {
+      "type": "number"
+    },
     "completed_at": {
       "format": "date-time",
       "type": "string"

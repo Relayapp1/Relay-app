@@ -14,6 +14,7 @@ const publicDriverName=(name)=>{
   const parts=String(name||'Driver').trim().split(/\s+/).filter(Boolean);
   return parts.length>1?`${parts[0]} ${parts[parts.length-1][0].toUpperCase()}.`:parts[0]||'Driver';
 };
+const redactContactInfo=(text)=>String(text||'').replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g,'[redacted]').replace(/(\+?\d[\d\s().-]{7,}\d)/g,'[redacted]');
 const EMPTY_JOB={vehicle_info:'',pickup_location:'',delivery_location:'',pickup_date:'',pickup_time:'',return_plan:'',estimated_hours:2,minimum_rate:20,payment_method:'Relay wallet',notes:'',preferred_driver_id:'',preferred_driver_name:'',preferred_only:false};
 
 export default function DriveBid(){
@@ -175,7 +176,7 @@ export default function DriveBid(){
       const onTimeTrips=ownTrips.filter(t=>typeof t.started_on_time==='boolean');
       const onTimePercentage=onTimeTrips.length?Math.round((onTimeTrips.filter(t=>t.started_on_time).length/onTimeTrips.length)*1000)/10:Number(driver?.on_time_percentage??100);
       const cancellationRate=(completedJobs+cancelledTrips)>0?Math.round((cancelledTrips/(completedJobs+cancelledTrips))*1000)/10:0;
-      const relevantExperience=[driver?.years_experience!=null?`${driver.years_experience} years experience`:null,driver?.vehicle_types,driver?.bio].filter(Boolean).join(' · ');
+      const relevantExperience=[driver?.years_experience!=null?`${driver.years_experience} years experience`:null,driver?.vehicle_types,redactContactInfo(driver?.bio)||null].filter(Boolean).join(' · ');
       const payload={deal_id:selected.id,driver_id:user.id,driver_name:publicDriverName(user.full_name||'Driver'),driver_operating_area:driver?.operating_area||driver?.home_location||'Area not provided',hourly_rate:rate,estimated_payout:rate*Number(selected.estimated_hours||0),driver_rating:Number(driver?.rating||5),completed_jobs:completedJobs,on_time_percentage:onTimePercentage,cancellation_rate:cancellationRate,relevant_experience:relevantExperience||'Verified delivery driver',vetting_status:driver?.status||'pending',status:'pending'};
       const tempId=existing?.id||`temp-${Date.now()}`;
       const optimistic={...payload,id:tempId,created_date:new Date().toISOString()};
@@ -282,7 +283,7 @@ export default function DriveBid(){
     const d=allDrivers.find(x=>x.created_by_id===bid.driver_id);
     const completed=Number(bid.completed_jobs??d?.completed_deliveries??0);
     const cancelled=Number(d?.cancelled_trips||0);
-    return {name:publicDriverName(bid.driver_name||d?.full_name||'Verified driver'),operatingArea:bid.driver_operating_area||d?.operating_area||d?.home_location||'Area not provided',vetted:(bid.vetting_status||d?.status)==='approved',rating:Number(bid.driver_rating??d?.rating??5),completed,onTime:Number(bid.on_time_percentage??d?.on_time_percentage??100),cancellationRate:Number(bid.cancellation_rate??((completed+cancelled)>0?(cancelled/(completed+cancelled))*100:0)),experience:bid.relevant_experience||[d?.years_experience!=null?`${d.years_experience} years experience`:null,d?.vehicle_types,d?.bio].filter(Boolean).join(' · ')||'Verified delivery driver'};
+    return {name:publicDriverName(bid.driver_name||d?.full_name||'Verified driver'),operatingArea:bid.driver_operating_area||d?.operating_area||d?.home_location||'Area not provided',vetted:(bid.vetting_status||d?.status)==='approved',rating:Number(bid.driver_rating??d?.rating??5),completed,onTime:Number(bid.on_time_percentage??d?.on_time_percentage??100),cancellationRate:Number(bid.cancellation_rate??((completed+cancelled)>0?(cancelled/(completed+cancelled))*100:0)),experience:bid.relevant_experience||[d?.years_experience!=null?`${d.years_experience} years experience`:null,d?.vehicle_types,redactContactInfo(d?.bio)||null].filter(Boolean).join(' · ')||'Verified delivery driver'};
   };
   const rankedBids=useMemo(()=>{
     if(!selected)return [];

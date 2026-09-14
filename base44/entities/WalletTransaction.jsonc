@@ -27,6 +27,18 @@
     "amount": {
       "type": "number"
     },
+    "speed": {
+      "enum": [
+        "standard",
+        "instant"
+      ],
+      "default": "standard",
+      "type": "string"
+    },
+    "fee_amount": {
+      "default": 0,
+      "type": "number"
+    },
     "status": {
       "enum": [
         "pending",

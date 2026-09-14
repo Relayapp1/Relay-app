@@ -1,5 +1,7 @@
 import { createClientFromRequest } from "npm:@base44/sdk@0.8.44";
 
+const INSTANT_PAYOUT_FEE = 2;
+
 export default async function(req: Request): Promise<Response> {
   try {
     const base44 = createClientFromRequest(req);
@@ -31,10 +33,13 @@ export default async function(req: Request): Promise<Response> {
       if (role !== "driver" && !admin) return Response.json({ error: "Only drivers can withdraw" }, { status: 403 });
       const amount = Number(body.amount);
       if (!amount || amount <= 0) return Response.json({ error: "Enter a valid amount" }, { status: 400 });
+      const speed = body.speed === "instant" ? "instant" : "standard";
+      const feeAmount = speed === "instant" ? INSTANT_PAYOUT_FEE : 0;
+      const total = amount + feeAmount;
       const wallet = await getWallet(user.id, "driver");
-      if (Number(wallet.balance || 0) < amount) return Response.json({ error: "Insufficient balance for withdrawal" }, { status: 400 });
-      await base44.asServiceRole.entities.Wallet.update(wallet.id, { pending_withdrawals: Number(wallet.pending_withdrawals || 0) + amount });
-      await base44.asServiceRole.entities.WalletTransaction.create({ user_id: user.id, role: "driver", type: "withdrawal", amount, status: "pending", bank_name: body.bank_name || "", bank_account_last4: body.bank_account_last4 || "", bank_routing: body.bank_routing || "" });
+      if (Number(wallet.balance || 0) < total) return Response.json({ error: `Insufficient balance for withdrawal${feeAmount ? ` (includes $${feeAmount.toFixed(2)} instant payout fee)` : ""}` }, { status: 400 });
+      await base44.asServiceRole.entities.Wallet.update(wallet.id, { pending_withdrawals: Number(wallet.pending_withdrawals || 0) + total });
+      await base44.asServiceRole.entities.WalletTransaction.create({ user_id: user.id, role: "driver", type: "withdrawal", amount, speed, fee_amount: feeAmount, status: "pending", bank_name: body.bank_name || "", bank_account_last4: body.bank_account_last4 || "", bank_routing: body.bank_routing || "" });
       return Response.json({ success: true });
     }
 
@@ -122,16 +127,17 @@ export default async function(req: Request): Promise<Response> {
       if (!txn) return Response.json({ error: "Transaction not found" }, { status: 404 });
       if (txn.status !== "pending") return Response.json({ error: "Transaction already processed" }, { status: 400 });
       const wallet = await getWallet(txn.user_id, txn.role);
+      const withdrawalTotal = Number(txn.amount) + Number(txn.fee_amount || 0);
       if (action === "approve") {
         if (txn.type === "deposit") await base44.asServiceRole.entities.Wallet.update(wallet.id, { balance: Number(wallet.balance || 0) + Number(txn.amount), pending_deposits: Math.max(0, Number(wallet.pending_deposits || 0) - Number(txn.amount)) });
         if (txn.type === "withdrawal") {
-          if (Number(wallet.balance || 0) < Number(txn.amount)) return Response.json({ error: "Driver has insufficient balance" }, { status: 400 });
-          await base44.asServiceRole.entities.Wallet.update(wallet.id, { balance: Number(wallet.balance || 0) - Number(txn.amount), pending_withdrawals: Math.max(0, Number(wallet.pending_withdrawals || 0) - Number(txn.amount)) });
+          if (Number(wallet.balance || 0) < withdrawalTotal) return Response.json({ error: "Driver has insufficient balance" }, { status: 400 });
+          await base44.asServiceRole.entities.Wallet.update(wallet.id, { balance: Number(wallet.balance || 0) - withdrawalTotal, pending_withdrawals: Math.max(0, Number(wallet.pending_withdrawals || 0) - withdrawalTotal) });
         }
         await base44.asServiceRole.entities.WalletTransaction.update(txnId, { status: "completed" });
       } else {
         if (txn.type === "deposit") await base44.asServiceRole.entities.Wallet.update(wallet.id, { pending_deposits: Math.max(0, Number(wallet.pending_deposits || 0) - Number(txn.amount)) });
-        if (txn.type === "withdrawal") await base44.asServiceRole.entities.Wallet.update(wallet.id, { pending_withdrawals: Math.max(0, Number(wallet.pending_withdrawals || 0) - Number(txn.amount)) });
+        if (txn.type === "withdrawal") await base44.asServiceRole.entities.Wallet.update(wallet.id, { pending_withdrawals: Math.max(0, Number(wallet.pending_withdrawals || 0) - withdrawalTotal) });
         await base44.asServiceRole.entities.WalletTransaction.update(txnId, { status: "rejected" });
       }
       return Response.json({ success: true });

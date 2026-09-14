@@ -193,7 +193,7 @@ export default function AdminDashboard(){
   const refreshData=async()=>{setRefreshing(true);setError('');try{await load();setError('Data refreshed.');}catch(e){setError(e.message||'Could not refresh');}finally{setRefreshing(false);}};
   const approveWalletTxn=async(id)=>{setSaving(`wallet-${id}`);try{await approveTransaction(id);await load();}catch(err){setError(err.message||'Could not approve');}finally{setSaving('');}};
   const rejectWalletTxn=async(id)=>{setSaving(`wallet-${id}`);try{await rejectTransaction(id);await load();}catch(err){setError(err.message||'Could not reject');}finally{setSaving('');}};
-  const pendingWallet=data.walletTxns.filter(x=>x.status==='pending');
+  const pendingWallet=data.walletTxns.filter(x=>x.status==='pending').sort((a,b)=>(b.speed==='instant'?1:0)-(a.speed==='instant'?1:0));
   const userNameFor=(id)=>{const u=data.users.find(x=>x.id===id);return u?.full_name||u?.email||(data.drivers.find(d=>d.created_by_id===id)?.full_name)||'User';};
 
   const pendingBrokers=data.brokers.filter(x=>x.status==='pending'||!x.status);
@@ -334,10 +334,11 @@ export default function AdminDashboard(){
       ])} empty="No bids yet."/>}
 
       {tab==='wallet'&&<div className="db-admin-sections">
-        <ApprovalSection title="Pending wallet requests" empty="No pending wallet requests." records={pendingWallet} countLabel="pending" render={(txn)=><article className="db-panel db-admin-card" key={txn.id}>
-          <div className="db-admin-card-head"><div><h3>{userNameFor(txn.user_id)}</h3><p>{txn.type.replace('_',' ')} · {money(txn.amount)}</p></div><span className={`db-admin-status ${txn.status==='completed'?'approved':txn.status==='rejected'?'rejected':'pending'}`}>{txn.status}</span></div>
+        <ApprovalSection title="Pending wallet requests" empty="No pending wallet requests." records={pendingWallet} countLabel="pending" render={(txn)=><article className="db-panel db-admin-card" key={txn.id} style={txn.speed==='instant'?{borderColor:'var(--db-danger)'}:{}}>
+          <div className="db-admin-card-head"><div><h3>{userNameFor(txn.user_id)}{txn.speed==='instant'&&<span className="db-chip" style={{marginLeft:8,background:'#fff0f1',color:'var(--db-danger)'}}>⚡ Instant</span>}</h3><p>{txn.type.replace('_',' ')} · {money(txn.amount)}</p></div><span className={`db-admin-status ${txn.status==='completed'?'approved':txn.status==='rejected'?'rejected':'pending'}`}>{txn.status}</span></div>
           <Info label="Type" value={txn.type.replace('_',' ')}/>
           <Info label="Amount" value={money(txn.amount)}/>
+          {txn.fee_amount>0&&<Info label="Instant fee" value={money(txn.fee_amount)}/>}
           <Info label="Role" value={txn.role}/>
           {txn.bank_name&&<Info label="Bank" value={`${txn.bank_name} ****${txn.bank_account_last4}`}/>}
           {txn.bank_routing&&<Info label="Routing" value={txn.bank_routing}/>}

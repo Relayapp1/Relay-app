@@ -22,8 +22,8 @@ async function call(payload) {
 export const requestDeposit = (user, amount, notes = '') =>
   call({ action: 'deposit_request', amount: Number(amount), notes });
 
-export const requestWithdrawal = (user, amount, bank) =>
-  call({ action: 'withdraw_request', amount: Number(amount), bank_name: bank.bank_name, bank_account_last4: bank.bank_account_last4, bank_routing: bank.bank_routing });
+export const requestWithdrawal = (user, amount, bank, speed = 'standard') =>
+  call({ action: 'withdraw_request', amount: Number(amount), bank_name: bank.bank_name, bank_account_last4: bank.bank_account_last4, bank_routing: bank.bank_routing, speed });
 
 export const reserveTripFunding = (trip, amount) =>
   call({ action: 'reserve_funding', trip_id: trip.id, amount: Number(amount) });

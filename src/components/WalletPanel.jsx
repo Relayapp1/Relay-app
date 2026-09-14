@@ -10,7 +10,9 @@ export default function WalletPanel({ user }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [amount, setAmount] = useState('');
+  const [speed, setSpeed] = useState('standard');
   const [bank, setBank] = useState({ bank_name: '', bank_account_last4: '', bank_routing: '' });
+  const INSTANT_FEE = 2;
   const isBroker = user?.account_type !== 'driver';
 
   const load = async () => {
@@ -47,10 +49,11 @@ export default function WalletPanel({ user }) {
   const withdraw = async (e) => {
     e.preventDefault(); setSaving(true); setMessage('');
     try {
-      await requestWithdrawal(user, amount, bank);
+      await requestWithdrawal(user, amount, bank, speed);
       setAmount('');
+      setSpeed('standard');
       setBank({ bank_name: '', bank_account_last4: '', bank_routing: '' });
-      setMessage('Withdrawal requested. An admin will process your bank transfer.');
+      setMessage(speed === 'instant' ? `Instant withdrawal requested — flagged for priority admin review. A $${INSTANT_FEE.toFixed(2)} fee applies.` : 'Withdrawal requested. An admin will process your bank transfer.');
       await load();
     } catch (e2) { setMessage(e2.message || 'Could not request withdrawal'); }
     finally { setSaving(false); }
@@ -81,19 +84,25 @@ export default function WalletPanel({ user }) {
         ) : (
           <form className="db-form" onSubmit={withdraw}>
             <div className="db-form-grid">
-              <Field label="Withdraw amount ($)" full><input type="number" min="1" step="0.01" max={wallet?.balance || 0} value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" required /></Field>
+              <Field label="Withdraw amount ($)" full><input type="number" min="1" step="0.01" max={Math.max(0, (wallet?.balance || 0) - (speed === 'instant' ? INSTANT_FEE : 0))} value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" required /></Field>
+              <Field label="Payout speed" full>
+                <div className="db-inline-actions">
+                  <button type="button" className="db-button secondary" style={speed === 'standard' ? { background: 'var(--db-navy)', color: 'white' } : {}} onClick={() => setSpeed('standard')}>Standard · Free</button>
+                  <button type="button" className="db-button secondary" style={speed === 'instant' ? { background: 'var(--db-navy)', color: 'white' } : {}} onClick={() => setSpeed('instant')}>Instant · ${INSTANT_FEE.toFixed(2)} fee</button>
+                </div>
+              </Field>
               <Field label="Bank name"><input value={bank.bank_name} onChange={e => setBank({ ...bank, bank_name: e.target.value })} required /></Field>
               <Field label="Account last 4"><input maxLength={4} value={bank.bank_account_last4} onChange={e => setBank({ ...bank, bank_account_last4: e.target.value })} required /></Field>
               <Field label="Routing number" full><input value={bank.bank_routing} onChange={e => setBank({ ...bank, bank_routing: e.target.value })} required /></Field>
             </div>
-            <div className="db-form-actions"><button className="db-button" disabled={saving}>{saving ? 'Submitting…' : 'Request withdrawal'}</button></div>
-            <div className="db-notice" style={{ marginTop: 8 }}>An admin processes your bank transfer. Real instant payouts are coming soon.</div>
+            <div className="db-form-actions"><button className="db-button" disabled={saving}>{saving ? 'Submitting…' : speed === 'instant' ? `Request instant withdrawal (+$${INSTANT_FEE.toFixed(2)})` : 'Request withdrawal'}</button></div>
+            <div className="db-notice" style={{ marginTop: 8 }}>{speed === 'instant' ? `An admin still processes every transfer in this beta — instant requests are just flagged for priority review, and carry a $${INSTANT_FEE.toFixed(2)} fee. Real automated instant payouts are coming soon.` : 'An admin processes your bank transfer.'}</div>
           </form>
         )}
         <div className="db-mini-title" style={{ marginTop: 18 }}>Transaction history</div>
         {txns.length ? txns.map(t => (
           <div className="db-expense-row" key={t.id}>
-            <div><strong>{t.type.replace('_', ' ')} · {money(t.amount)}</strong><small>{new Date(t.created_date).toLocaleDateString()}{t.bank_name ? ` · ${t.bank_name} ****${t.bank_account_last4}` : ''}</small></div>
+            <div><strong>{t.type.replace('_', ' ')} · {money(t.amount)}{t.type === 'withdrawal' && t.speed === 'instant' ? ` · Instant (+${money(t.fee_amount || 0)} fee)` : ''}</strong><small>{new Date(t.created_date).toLocaleDateString()}{t.bank_name ? ` · ${t.bank_name} ****${t.bank_account_last4}` : ''}</small></div>
             <span className={`db-admin-status ${t.status === 'completed' ? 'approved' : t.status === 'rejected' ? 'rejected' : 'pending'}`}>{t.status}</span>
           </div>
         )) : <p className="db-job-meta">No transactions yet.</p>}

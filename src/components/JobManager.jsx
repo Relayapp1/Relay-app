@@ -8,10 +8,11 @@ const STATUS_FILTERS = ['all', 'open', 'assigned', 'completed', 'cancelled'];
 
 const EMPTY_JOB = { vehicle_info: '', pickup_location: '', delivery_location: '', pickup_date: '', pickup_time: '', return_plan: '', estimated_hours: 2, minimum_rate: 20, notes: '' };
 
-export default function JobManager({ deals, bids = [], onSave, onDelete, onDecideBid, onCreate, busy }) {
+export default function JobManager({ deals, bids = [], onSave, onDelete, onCancel, onDecideBid, onCreate, busy }) {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [confirmCancel, setConfirmCancel] = useState(null);
   const [bidsDeal, setBidsDeal] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [posting, setPosting] = useState(false);
@@ -70,7 +71,7 @@ export default function JobManager({ deals, bids = [], onSave, onDelete, onDecid
                   <td>{deal.broker_name || '—'}</td>
                   <td><span className={`db-admin-status ${deal.status === 'completed' ? 'approved' : deal.status === 'cancelled' ? 'rejected' : 'pending'}`}>{deal.status || '—'}</span></td>
                   <td>{[deal.pickup_date, deal.pickup_time].filter(Boolean).join(' · ') || '—'}</td>
-                  <td><div className="db-inline-actions"><button className="db-small-btn" disabled={busy} onClick={() => setBidsDeal(deal)}>Bids ({bids.filter(b => b.deal_id === deal.id && b.status !== 'withdrawn').length})</button><button className="db-small-btn" disabled={busy} onClick={() => openEdit(deal)}>Edit</button><button className="db-small-btn" style={{ color: 'var(--db-danger)', background: '#fff0f1' }} disabled={busy} onClick={() => setConfirmDelete(deal)}>Delete</button></div></td>
+                  <td><div className="db-inline-actions"><button className="db-small-btn" disabled={busy} onClick={() => setBidsDeal(deal)}>Bids ({bids.filter(b => b.deal_id === deal.id && b.status !== 'withdrawn').length})</button><button className="db-small-btn" disabled={busy} onClick={() => openEdit(deal)}>Edit</button>{!['completed', 'cancelled'].includes(deal.status) && <button className="db-small-btn" style={{ color: 'var(--db-danger)', background: '#fff0f1' }} disabled={busy} onClick={() => setConfirmCancel(deal)}>Cancel</button>}<button className="db-small-btn" style={{ color: 'var(--db-danger)', background: '#fff0f1' }} disabled={busy} onClick={() => setConfirmDelete(deal)}>Delete</button></div></td>
                 </tr>
               ))}
             </tbody>
@@ -110,6 +111,18 @@ export default function JobManager({ deals, bids = [], onSave, onDelete, onDecid
             <div className="db-form">
               <p className="db-job-meta" style={{ marginBottom: 16 }}>This permanently deletes <strong>{confirmDelete.vehicle_info || 'this job'}</strong> ({confirmDelete.pickup_location || '—'} → {confirmDelete.delivery_location || '—'}). This cannot be undone.</p>
               <div className="db-form-actions"><button type="button" className="db-button secondary" onClick={() => setConfirmDelete(null)}>Cancel</button><button className="db-button danger" disabled={busy} onClick={() => { onDelete(confirmDelete.id); setConfirmDelete(null); }}>Delete job</button></div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmCancel && (
+        <div className="db-modal" role="dialog" aria-modal="true" onMouseDown={e => { if (e.target === e.currentTarget) setConfirmCancel(null); }}>
+          <div className="db-modal-card" style={{ maxWidth: 460 }}>
+            <div className="db-modal-head"><h2>Cancel job?</h2><button className="db-close" onClick={() => setConfirmCancel(null)} aria-label="Close">×</button></div>
+            <div className="db-form">
+              <p className="db-job-meta" style={{ marginBottom: 16 }}>This cancels <strong>{confirmCancel.vehicle_info || 'this job'}</strong> ({confirmCancel.pickup_location || '—'} → {confirmCancel.delivery_location || '—'}). If a driver is actively assigned, their trip is cancelled too, the accepted bid is rejected, and any funding the broker reserved is refunded. The job record and its history are kept, unlike Delete.</p>
+              <div className="db-form-actions"><button type="button" className="db-button secondary" onClick={() => setConfirmCancel(null)}>Back</button><button className="db-button danger" disabled={busy} onClick={() => { onCancel(confirmCancel); setConfirmCancel(null); }}>Cancel job</button></div>
             </div>
           </div>
         </div>

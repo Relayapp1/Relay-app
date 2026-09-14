@@ -36,7 +36,8 @@
       "enum": [
         "pending",
         "approved",
-        "rejected"
+        "rejected",
+        "suspended"
       ],
       "rls": {
         "write": {

@@ -6,6 +6,12 @@
       "runtimeExecutable": "/Users/aharongross/relay-app/.tools/run-dev.sh",
       "runtimeArgs": [],
       "port": 5173
+    },
+    {
+      "name": "relay-dev-remote",
+      "runtimeExecutable": "/Users/aharongross/relay-app/.tools/run-dev-remote.sh",
+      "runtimeArgs": [],
+      "port": 5173
     }
   ]
 }

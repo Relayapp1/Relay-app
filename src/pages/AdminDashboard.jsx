@@ -7,7 +7,7 @@ import ApplicantProfileModal from '@/components/ApplicantProfileModal';
 import JobManager from '@/components/JobManager';
 import TripDetailModal from '@/components/TripDetailModal';
 import { formatPhone } from '@/lib/phone';
-import { approveTransaction, rejectTransaction, money } from '@/lib/wallet';
+import { approveTransaction, rejectTransaction, refundTripFunding, money } from '@/lib/wallet';
 
 const dateText=(value)=>value?new Date(value).toLocaleDateString():'—';
 const statusClass=(status)=>`db-admin-status ${status||'pending'}`;
@@ -116,6 +116,23 @@ export default function AdminDashboard(){
     setSaving(`job-${id}`);
     try{ await base44.entities.Deal.delete(id); await load(); setError('Job deleted.'); }
     catch(err){ setError(err.message||'Could not delete job'); }
+    finally{ setSaving(''); }
+  };
+
+  const cancelJob=async(deal)=>{
+    setSaving(`job-${deal.id}`);
+    try{
+      const trip=data.trips.find(t=>t.deal_id===deal.id&&!['completed','cancelled'].includes(t.status));
+      if(trip){
+        if(trip.funding_status==='confirmed')await refundTripFunding(trip);
+        const acceptedBid=data.bids.find(b=>b.deal_id===deal.id&&b.driver_id===trip.driver_id&&b.status==='accepted');
+        if(acceptedBid)await base44.entities.Bid.update(acceptedBid.id,{status:'rejected'});
+        await base44.entities.Trip.update(trip.id,{status:'cancelled',cancelled_by:'admin',timer_started_at:null});
+      }
+      await base44.entities.Deal.update(deal.id,{status:'cancelled',cancelled_by:'admin'});
+      await load();
+      setError(trip?'Job and its active trip were cancelled. Any reserved funding was refunded.':'Job cancelled.');
+    }catch(err){ setError(err.message||'Could not cancel job'); }
     finally{ setSaving(''); }
   };
 
@@ -281,7 +298,7 @@ export default function AdminDashboard(){
             {driver.license_back&&<button className="db-link-btn" onClick={()=>openDocument(driver.license_back)}>License back</button>}
             {driver.driving_history_report&&<button className="db-link-btn" onClick={()=>openDocument(driver.driving_history_report)}>Driving history</button>}
           </div>
-          <ApprovalActions busy={saving===`Driver-${driver.id}`} status={driver.status||'pending'} onApprove={()=>updateStatus('Driver',driver,'approved')} onReject={()=>updateStatus('Driver',driver,'rejected')}/>
+          <LifecycleActions busy={saving===`Driver-${driver.id}`} status={driver.status||'pending'} onApprove={()=>updateStatus('Driver',driver,'approved')} onReject={()=>updateStatus('Driver',driver,'rejected')} onSuspend={()=>updateStatus('Driver',driver,'suspended')} onReinstate={()=>updateStatus('Driver',driver,'approved')}/>
         </ApprovalCard>}/>
       </div>}
 
@@ -295,7 +312,7 @@ export default function AdminDashboard(){
             {broker.w9_document&&<button className="db-link-btn" onClick={()=>openDocument(broker.w9_document)}>W-9</button>}
             {broker.broker_license_document&&<button className="db-link-btn" onClick={()=>openDocument(broker.broker_license_document)}>Broker license</button>}
           </div>
-          <ApprovalActions busy={saving===`Broker-${broker.id}`} status={broker.status||'pending'} onApprove={()=>updateStatus('Broker',broker,'approved')} onReject={()=>updateStatus('Broker',broker,'rejected')}/>
+          <LifecycleActions busy={saving===`Broker-${broker.id}`} status={broker.status||'pending'} onApprove={()=>updateStatus('Broker',broker,'approved')} onReject={()=>updateStatus('Broker',broker,'rejected')} onSuspend={()=>updateStatus('Broker',broker,'suspended')} onReinstate={()=>updateStatus('Broker',broker,'approved')}/>
         </ApprovalCard>}/>
       </div>}
 
@@ -305,7 +322,7 @@ export default function AdminDashboard(){
         user.full_name||'—',user.email||'—',user.account_type||'Not selected',user.role||'user',dateText(user.created_date)
       ])} empty="No registered users yet."/>}
 
-      {tab==='jobs'&&<JobManager deals={data.deals} bids={data.bids} onSave={saveJob} onDelete={deleteJob} onDecideBid={decideBid} onCreate={createJob} busy={Boolean(saving)}/>}
+      {tab==='jobs'&&<JobManager deals={data.deals} bids={data.bids} onSave={saveJob} onDelete={deleteJob} onCancel={cancelJob} onDecideBid={decideBid} onCreate={createJob} busy={Boolean(saving)}/>}
 
       {tab==='bids'&&<Table headers={['Driver','Hourly rate','Status','Job ID','Submitted']} rows={data.bids.map(bid=>[
         bid.driver_name||'—',`$${Number(bid.hourly_rate||0).toFixed(2)}/hr`,bid.status||'—',bid.deal_id||'—',dateText(bid.created_date)
@@ -339,4 +356,12 @@ function Info({label,value}){return value?<div className="db-admin-info"><span>{
 function ApprovalSection({title,empty,records,render,countLabel='pending'}){return <section><div className="db-heading-row db-admin-subhead"><div><h2>{title}</h2></div><span className="db-count">{records.length} {countLabel}</span></div><div className="db-admin-card-grid">{records.length?records.map(render):<div className="db-panel db-empty"><strong>Nothing waiting</strong>{empty}</div>}</div></section>}
 function ApprovalCard({title,subtitle,status,onClick,children}){return <article className="db-panel db-admin-card" style={{cursor:'pointer'}} onClick={onClick}><div className="db-admin-card-head"><div><h3>{title}</h3><p>{subtitle||'No email provided'}</p></div><span className={statusClass(status)}>{status||'pending'}</span></div>{children}</article>}
 function ApprovalActions({busy,status,onApprove,onReject}){return <div className="db-inline-actions db-admin-actions" onClick={e=>e.stopPropagation()}><button className="db-button" disabled={busy||status==='approved'} onClick={onApprove}>{status==='approved'?'Approved':'Approve'}</button><button className="db-button danger" disabled={busy||status==='rejected'} onClick={onReject}>{status==='rejected'?'Rejected':'Reject'}</button></div>}
+function LifecycleActions({busy,status,onApprove,onReject,onSuspend,onReinstate}){
+  return <div className="db-inline-actions db-admin-actions" onClick={e=>e.stopPropagation()}>
+    {status==='approved'&&<button className="db-button danger" disabled={busy} onClick={onSuspend}>Suspend</button>}
+    {status==='suspended'&&<button className="db-button" disabled={busy} onClick={onReinstate}>Reinstate</button>}
+    {(status==='pending'||!status)&&<><button className="db-button" disabled={busy} onClick={onApprove}>Approve</button><button className="db-button danger" disabled={busy} onClick={onReject}>Reject</button></>}
+    {status==='rejected'&&<button className="db-button secondary" disabled={busy} onClick={onApprove}>Approve</button>}
+  </div>;
+}
 function Table({headers,rows,empty}){return <div className="db-panel db-admin-table-wrap">{rows.length?<table className="db-admin-table"><thead><tr>{headers.map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{rows.map((row,i)=><tr key={i}>{row.map((cell,j)=><td key={j}>{cell}</td>)}</tr>)}</tbody></table>:<div className="db-empty"><strong>Nothing to show</strong>{empty}</div>}</div>}

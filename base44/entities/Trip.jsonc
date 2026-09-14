@@ -16,7 +16,8 @@
     "cancelled_by": {
       "enum": [
         "driver",
-        "broker"
+        "broker",
+        "admin"
       ],
       "type": "string"
     },

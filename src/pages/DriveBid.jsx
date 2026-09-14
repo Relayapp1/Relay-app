@@ -165,6 +165,7 @@ export default function DriveBid(){
     const minimum=Number(selected.minimum_rate||0);
     if(rate<minimum){notify(`Minimum allowed bid is $${minimum}/hr`);return;}
     if(selected.preferred_only&&selected.preferred_driver_id!==user.id){notify('This opportunity is reserved for the broker’s preferred driver.');return;}
+    if(driver?.status!=='approved'){notify(driver?.status==='suspended'?'Your account is suspended and cannot bid on jobs.':'Your driver application must be approved before you can bid.');return;}
     setSaving(true);
     try{
       const existing=bids.find(b=>b.deal_id===selected.id&&b.driver_id===user.id&&b.status!=='withdrawn');

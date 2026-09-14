@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { base44 } from '@/api/base44Client';
-import { processTripPayment } from '@/lib/wallet';
+import { processTripPayment, refundTripFunding } from '@/lib/wallet';
 import { resolveTripDispute } from '@/lib/tripReview';
 import { motion } from 'framer-motion';
 
@@ -79,11 +79,12 @@ export default function TripDetailModal({ trip, deals, bids, onClose, onChanged 
   }, 'Trip completed (broker view).');
 
   const cancelTrip = () => run(async () => {
+    if (trip.funding_status === 'confirmed') await refundTripFunding(trip);
     const accepted = bids.find(x => x.deal_id === trip.deal_id && x.driver_id === trip.driver_id && x.status === 'accepted');
     if (accepted) await base44.entities.Bid.update(accepted.id, { status: 'rejected' });
-    await base44.entities.Trip.update(trip.id, { status: 'cancelled', cancelled_by: 'broker', timer_started_at: null });
-    await base44.entities.Deal.update(trip.deal_id, { status: 'cancelled' });
-  }, 'Trip cancelled (broker view).');
+    await base44.entities.Trip.update(trip.id, { status: 'cancelled', cancelled_by: 'admin', timer_started_at: null });
+    await base44.entities.Deal.update(trip.deal_id, { status: 'cancelled', cancelled_by: 'admin' });
+  }, 'Trip cancelled by admin. Any reserved funding was refunded to the broker.');
 
   const saveTip = () => run(async () => {
     await base44.entities.Trip.update(trip.id, { tip_amount: Math.max(0, Number(tipInput) || 0) });

@@ -35,3 +35,6 @@ dist-ssr
 .env
 .vite
 base44/.app.jsonc
+
+# Local-only dev tooling (Node/Deno/base44 CLI binaries downloaded for this machine)
+.tools/

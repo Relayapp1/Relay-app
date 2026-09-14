@@ -7,6 +7,7 @@ import { formatPhone } from '@/lib/phone';
 import { isDriveBidOwner } from '@/lib/ownerAccess';
 import PullToRefresh from '@/components/PullToRefresh';
 import WalletPanel from '@/components/WalletPanel';
+import { buildTripStatementCsv, downloadCsv } from '@/lib/earningsExport';
 
 const hours=(minutes)=>Number(minutes||0)/60;
 const money=(value)=>`$${Number(value||0).toFixed(2)}`;
@@ -99,6 +100,12 @@ export default function AccountProfile(){
     }catch(error){setMessage(error?.response?.data?.error||error.message||'Could not delete account');setDeleting(false);}
   };
 
+  const exportStatement=()=>{
+    const csv=buildTripStatementCsv(trips,expenses,isPoster);
+    const label=isPoster?'statement':'earnings-summary';
+    downloadCsv(`relay-${label}-${new Date().toISOString().slice(0,10)}.csv`,csv);
+  };
+
   const openDocument=async(uri)=>{
     if(!uri)return;
     try{
@@ -173,6 +180,13 @@ export default function AccountProfile(){
           <div className="db-profile-stats">{stats.map(([label,value])=><div className="db-stat" key={label}><strong>{value}</strong><span>{label}</span></div>)}</div>
         </aside>
       </div>
+      {!isAdmin&&<section className="db-panel" style={{marginTop:22}}>
+        <div className="db-panel-head"><h2>Payment history</h2><span className="db-count">{completed.length} completed {completed.length===1?'job':'jobs'}</span></div>
+        <div className="db-side-body">
+          <p className="db-job-meta" style={{margin:'0 0 14px'}}>{isPoster?'Download a statement of what you’ve paid, trip by trip — useful for your own records.':'Download a year-by-year summary of your completed jobs and payouts — useful for your own tax prep.'}</p>
+          <button className="db-button" disabled={!completed.length} onClick={exportStatement}>{completed.length?`Download ${isPoster?'statement':'earnings summary'} (CSV)`:'No completed jobs yet'}</button>
+        </div>
+      </section>}
       <section className="db-panel" style={{marginTop:22}}>
         <div className="db-panel-head"><h2>Change password</h2><span className="db-count">Security</span></div>
         <div className="db-side-body">

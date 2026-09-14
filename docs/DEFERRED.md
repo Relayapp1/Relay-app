@@ -18,6 +18,16 @@ Things intentionally not built yet, so they don't get lost. Revisit each when it
 
 **Revisit when:** the user is ready to schedule this migration as its own dedicated project phase — it's a full backend swap, not an incremental feature, and deserves its own planning pass rather than being folded into ongoing feature work.
 
+## Activate real Sign in with Apple
+
+**Status:** frontend built (`src/pages/Login.jsx`/`Register.jsx` have a working "Continue with Apple" button calling `base44.auth.loginWithProvider('apple', ...)`, confirmed correct against Base44's own SDK docs), but not activated. Base44 supports Apple as an OAuth provider, but activating it means uploading real Apple Developer Sign in with Apple credentials (Service ID, Team ID, Key ID, private key) into Base44's own dashboard settings.
+
+**Why deferred:** the user does not want to hand Base44 those credentials, specifically because Base44 is a backend already planned for replacement (see the migration item above) — configuring a sensitive OAuth private key into a system being migrated away from is wasted trust and wasted setup work. Decided 2026-09-15.
+
+**Direct consequence — App Store submission is now gated on the Supabase migration.** Apple Guideline 4.8 requires Sign in with Apple to be functional (not just present) wherever another social login is offered, and Relay offers Google sign-in. Since real Apple activation won't happen through Base44, **Relay cannot actually pass App Store review until after the Supabase migration**, when Sign in with Apple gets configured directly and natively in Supabase Auth. Decided explicitly with the user rather than assumed — the alternative (dropping Google sign-in too, to avoid the 4.8 trigger and allow earlier submission) was offered and declined. Google Play has no equivalent requirement, so this only blocks the Apple App Store, not Google Play.
+
+**Revisit when:** the Supabase migration (above) reaches the auth-provider setup step.
+
 ## Platform fee
 
 **Status:** not built. Relay currently takes $0 — brokers pay drivers wallet-to-wallet with no cut to the platform.

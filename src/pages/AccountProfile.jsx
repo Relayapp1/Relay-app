@@ -34,7 +34,7 @@ export default function AccountProfile(){
       let current=await base44.auth.me();
       const pendingRole=sessionStorage.getItem('drivebid_signup_role');
       if(pendingRole&&['driver','broker','individual'].includes(pendingRole)){
-        current=await base44.auth.updateMe({account_type:pendingRole});
+        current=await base44.auth.updateMe({account_type:pendingRole,terms_accepted_at:new Date().toISOString()});
         sessionStorage.removeItem('drivebid_signup_role');
       }
       setUser(current);

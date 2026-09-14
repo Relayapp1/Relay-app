@@ -126,6 +126,11 @@ export default function Login() {
           Create an account
         </Link>
       </div>
+      <p className="text-center text-xs text-muted-foreground mt-4">
+        <Link to="/terms" className="hover:underline">Terms of Service</Link>
+        {" "}·{" "}
+        <Link to="/privacy" className="hover:underline">Privacy Policy</Link>
+      </p>
     </AuthLayout>
   );
 }

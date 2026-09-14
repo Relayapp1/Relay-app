@@ -22,6 +22,11 @@ const TripCenter=lazy(()=>import('@/pages/TripCenter'));
 const OwnerLogin=lazy(()=>import('@/pages/OwnerLogin'));
 const VerifyEmail=lazy(()=>import('@/pages/VerifyEmail'));
 const ChangePassword=lazy(()=>import('@/pages/ChangePassword'));
+const PrivacyPolicy=lazy(()=>import('@/pages/PrivacyPolicy'));
+const TermsOfService=lazy(()=>import('@/pages/TermsOfService'));
+const DataConsent=lazy(()=>import('@/pages/DataConsent'));
+
+const CONSENT_EXEMPT_PATHS=['/data-consent','/privacy','/terms'];
 
 function OwnerRoute({children}){
   const {user}=useAuth();
@@ -29,7 +34,7 @@ function OwnerRoute({children}){
 }
 
 function AuthenticatedApp(){
-  const {isLoadingAuth,isLoadingPublicSettings,authError,navigateToLogin}=useAuth();
+  const {isLoadingAuth,isLoadingPublicSettings,authError,navigateToLogin,user}=useAuth();
   const location=useLocation();
   if(isLoadingPublicSettings||isLoadingAuth)return <div className="db-loading"><div><div className="db-spinner"/><span>Loading Relay…</span></div></div>;
   if(authError){
@@ -38,6 +43,9 @@ function AuthenticatedApp(){
     const offline=typeof navigator!=='undefined'&&navigator.onLine===false;
     return <div className="db-shell"><main className="db-page" style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'80vh'}}><div className="db-panel db-admin-denied"><h1>{offline?"You're offline":'Something went wrong'}</h1><p>{offline?'Relay needs an internet connection. Check your connection and try again.':(authError.message||'We couldn’t load Relay. Please try again.')}</p><button className="db-button" onClick={()=>window.location.reload()}>Retry</button></div></main></div>;
   }
+  if(user&&!isDriveBidOwner(user)&&!user.data_consent_accepted_at&&!CONSENT_EXEMPT_PATHS.includes(location.pathname)){
+    return <Navigate to={`/data-consent?returnTo=${encodeURIComponent(location.pathname)}`} replace/>;
+  }
   return <Suspense fallback={<div className="db-loading"><div><div className="db-spinner"/><span>Loading…</span></div></div>}><AnimatePresence mode="wait"><motion.div key={location.pathname} initial={{opacity:0,x:15}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-15}} transition={{duration:0.2,ease:'easeOut'}}><Routes location={location}>
     <Route path="/login" element={<Login/>}/>
     <Route path="/register" element={<Register/>}/>
@@ -45,6 +53,8 @@ function AuthenticatedApp(){
     <Route path="/reset-password" element={<ResetPassword/>}/>
     <Route path="/owner-login" element={<OwnerLogin/>}/>
     <Route path="/verify-email" element={<VerifyEmail/>}/>
+    <Route path="/privacy" element={<PrivacyPolicy/>}/>
+    <Route path="/terms" element={<TermsOfService/>}/>
     <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace/>}/>}>
       <Route path="/" element={<DriveBid/>}/>
       <Route path="/admin" element={<OwnerRoute><AdminDashboard/></OwnerRoute>}/>
@@ -53,6 +63,7 @@ function AuthenticatedApp(){
       <Route path="/profile" element={<AccountProfile/>}/>
       <Route path="/change-password" element={<ChangePassword/>}/>
       <Route path="/trips" element={<TripCenter/>}/>
+      <Route path="/data-consent" element={<DataConsent/>}/>
     </Route>
     <Route path="*" element={<PageNotFound/>}/>
   </Routes></motion.div></AnimatePresence></Suspense>;

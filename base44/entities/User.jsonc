@@ -15,6 +15,17 @@
       "format": "email",
       "type": "string"
     },
+    "terms_accepted_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "data_consent_accepted_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "data_consent_version": {
+      "type": "string"
+    },
     "display_name": {
       "type": "string"
     },

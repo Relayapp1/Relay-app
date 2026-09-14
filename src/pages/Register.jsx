@@ -47,7 +47,7 @@ export default function Register() {
       if (result?.access_token) {
         base44.auth.setToken(result.access_token);
       }
-      await base44.auth.updateMe({ account_type: accountType });
+      await base44.auth.updateMe({ account_type: accountType, terms_accepted_at: new Date().toISOString() });
       try {
         await base44.functions.invoke("request-email-verification", {});
         sessionStorage.setItem("drivebid_email_notice", "A confirmation link was sent to your email.");
@@ -244,6 +244,12 @@ export default function Register() {
             "Create account"
           )}
         </Button>
+        <p className="text-center text-xs text-muted-foreground mt-4">
+          By creating an account, you agree to Relay's{" "}
+          <Link to="/terms" className="text-primary font-medium hover:underline">Terms of Service</Link>
+          {" "}and{" "}
+          <Link to="/privacy" className="text-primary font-medium hover:underline">Privacy Policy</Link>.
+        </p>
       </form>
     </AuthLayout>
   );

@@ -1,0 +1,65 @@
+{
+  "name": "FavoriteDriver",
+  "type": "object",
+  "properties": {
+    "broker_id": {
+      "type": "string"
+    },
+    "driver_id": {
+      "type": "string"
+    },
+    "driver_name": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "broker_id",
+    "driver_id"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "data.broker_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "data.broker_id": "{{user.id}}"
+        },
+        {
+          "data.driver_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "$or": [
+        {
+          "data.broker_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -99,6 +99,10 @@
       "format": "date-time",
       "type": "string"
     },
+    "priority_until": {
+      "format": "date-time",
+      "type": "string"
+    },
     "reposted_from_deal_id": {
       "type": "string"
     },

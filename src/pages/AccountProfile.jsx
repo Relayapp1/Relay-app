@@ -8,6 +8,7 @@ import { isDriveBidOwner } from '@/lib/ownerAccess';
 import PullToRefresh from '@/components/PullToRefresh';
 import WalletPanel from '@/components/WalletPanel';
 import { buildTripStatementCsv, downloadCsv } from '@/lib/earningsExport';
+import { computeDriverBadges } from '@/lib/badges';
 
 const hours=(minutes)=>Number(minutes||0)/60;
 const money=(value)=>`$${Number(value||0).toFixed(2)}`;
@@ -178,6 +179,7 @@ export default function AccountProfile(){
         <aside className="db-panel">
           <div className="db-panel-head"><h2>Performance</h2></div>
           <div className="db-profile-stats">{stats.map(([label,value])=><div className="db-stat" key={label}><strong>{value}</strong><span>{label}</span></div>)}</div>
+          {!isPoster&&!isAdmin&&(()=>{const badges=computeDriverBadges(profile);return badges.length?<div className="db-chips" style={{padding:'0 20px 20px'}}>{badges.map(b=><span key={b.key} className="db-chip" title={b.label}>{b.emoji} {b.label}</span>)}</div>:null;})()}
         </aside>
       </div>
       {!isAdmin&&<section className="db-panel" style={{marginTop:22}}>

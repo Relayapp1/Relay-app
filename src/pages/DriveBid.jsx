@@ -9,6 +9,7 @@ import PullToRefresh from '@/components/PullToRefresh';
 import TripDetailModal from '@/components/TripDetailModal';
 import { motion } from 'framer-motion';
 import { refundTripFunding, chargeCancellationFee } from '@/lib/wallet';
+import { computeDriverBadges } from '@/lib/badges';
 
 const publicDriverName=(name)=>{
   const parts=String(name||'Driver').trim().split(/\s+/).filter(Boolean);
@@ -16,6 +17,7 @@ const publicDriverName=(name)=>{
 };
 const redactContactInfo=(text)=>String(text||'').replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g,'[redacted]').replace(/(\+?\d[\d\s().-]{7,}\d)/g,'[redacted]');
 const EMPTY_JOB={vehicle_info:'',pickup_location:'',delivery_location:'',pickup_date:'',pickup_time:'',return_plan:'',estimated_hours:2,minimum_rate:20,payment_method:'Relay wallet',notes:'',preferred_driver_id:'',preferred_driver_name:'',preferred_only:false};
+const PRIORITY_WINDOW_MINUTES=15;
 
 export default function DriveBid(){
   const navigate=useNavigate();
@@ -28,6 +30,9 @@ export default function DriveBid(){
   const [trips,setTrips]=useState([]);
   const [driver,setDriver]=useState(null);
   const [allDrivers,setAllDrivers]=useState([]);
+  const [favorites,setFavorites]=useState([]);
+  const [savedRoutes,setSavedRoutes]=useState([]);
+  const [favoritedByBrokerIds,setFavoritedByBrokerIds]=useState([]);
   const [loading,setLoading]=useState(true);
   const [view,setView]=useState(()=>new URLSearchParams(window.location.search).get('view')==='vetting'?'vetting':'jobs');
   const [jobModal,setJobModal]=useState(false);
@@ -59,18 +64,26 @@ export default function DriveBid(){
       }
       setUser(actingUser);
       setRole(actingUser.account_type==='driver'?'driver':'broker');
-      const [allDeals,allBids,userTrips,driverList]=await Promise.all([
+      const [allDeals,allBids,userTrips,driverList,favoriteList,routeList]=await Promise.all([
         base44.entities.Deal.list('-created_date',100),
         base44.entities.Bid.list('-created_date',500),
         actingUser.account_type==='driver'
           ? base44.entities.Trip.filter({driver_id:actingUser.id},'-created_date',250)
           : base44.entities.Trip.filter({broker_id:actingUser.id},'-created_date',250),
-        base44.entities.Driver.list('-created_date',500)
+        base44.entities.Driver.list('-created_date',500),
+        actingUser.account_type!=='driver'?base44.entities.FavoriteDriver.filter({broker_id:actingUser.id},'-created_date',200):Promise.resolve([]),
+        actingUser.account_type!=='driver'?base44.entities.SavedRoute.filter({broker_id:actingUser.id},'-created_date',100):Promise.resolve([])
       ]);
       setDeals(allDeals);
       setBids(allBids);
       setTrips(userTrips);
       setAllDrivers(driverList);
+      setFavorites(favoriteList);
+      setSavedRoutes(routeList);
+      if(actingUser.account_type==='driver'){
+        const favoritedBy=await base44.entities.FavoriteDriver.filter({driver_id:actingUser.id},'-created_date',200);
+        setFavoritedByBrokerIds(favoritedBy.map(f=>f.broker_id));
+      }
       const profiles=await base44.entities.Driver.filter({created_by_id:actingUser.id},'-created_date',1);
       setDriver(profiles[0]||null);
     }catch(error){console.error(error);notify('Unable to load marketplace data');}
@@ -96,7 +109,8 @@ export default function DriveBid(){
     return()=>{offDeals?.();offBids?.();offTrips?.();if(debounceTimer)window.clearTimeout(debounceTimer);};
   },[]);
 
-  const openDeals=deals.filter(d=>d.status==='open'&&(!d.preferred_only||d.preferred_driver_id===user?.id));
+  const hasPriorityAccess=(deal)=>!deal.priority_until||new Date(deal.priority_until)<=new Date()||favoritedByBrokerIds.includes(deal.broker_id);
+  const openDeals=deals.filter(d=>d.status==='open'&&(!d.preferred_only||d.preferred_driver_id===user?.id)&&hasPriorityAccess(d));
   const shownBrokerDeals=deals.filter(d=>d.broker_id===user?.id&&d.status==='open');
   const bidCount=(id)=>bids.filter(b=>b.deal_id===id&&b.status!=='withdrawn').length;
   const lowestBid=(id)=>{
@@ -134,18 +148,51 @@ export default function DriveBid(){
     }catch(error){notify(error.message||'Could not verify broker approval');}
   };
 
+  const saveRoute=async()=>{
+    if(!job.pickup_location||!job.delivery_location){notify('Add a pickup and delivery location first');return;}
+    const label=window.prompt('Name this route (e.g. "Downtown dealership → Airport")',`${job.pickup_location} → ${job.delivery_location}`);
+    if(label===null)return;
+    try{
+      const created=await base44.entities.SavedRoute.create({broker_id:user.id,label:label||`${job.pickup_location} → ${job.delivery_location}`,pickup_location:job.pickup_location,delivery_location:job.delivery_location});
+      setSavedRoutes([created,...savedRoutes]);
+      notify('Route saved');
+    }catch(error){notify(error.message||'Could not save route');}
+  };
+
+  const deleteRoute=async(routeId)=>{
+    setSavedRoutes(savedRoutes.filter(r=>r.id!==routeId));
+    try{await base44.entities.SavedRoute.delete(routeId);}
+    catch(error){notify(error.message||'Could not remove route');await load();}
+  };
+
+  const toggleFavorite=async(driverId,driverName)=>{
+    const existing=favorites.find(f=>f.driver_id===driverId);
+    try{
+      if(existing){
+        setFavorites(favorites.filter(f=>f.id!==existing.id));
+        await base44.entities.FavoriteDriver.delete(existing.id);
+        notify(`Removed ${driverName||'driver'} from favorites`);
+      }else{
+        const created=await base44.entities.FavoriteDriver.create({broker_id:user.id,driver_id:driverId,driver_name:driverName||''});
+        setFavorites([created,...favorites]);
+        notify(`Added ${driverName||'driver'} to favorites`);
+      }
+    }catch(error){notify(error.message||'Could not update favorites');await load();}
+  };
+
   const bookAgain=(pastDriver)=>{
     const last=pastDriver.lastTrip||{};
     const previous=deals.find(d=>d.id===last.deal_id)||{};
-    setJob({...EMPTY_JOB,vehicle_info:previous.vehicle_info||last.vehicle_info||'',pickup_location:previous.pickup_location||last.pickup_location||'',delivery_location:previous.delivery_location||last.delivery_location||'',return_plan:previous.return_plan||'',estimated_hours:previous.estimated_hours||2,minimum_rate:previous.minimum_rate||previous.target_rate||last.accepted_rate||20,payment_method:previous.payment_method||last.payment_method||'Relay wallet',notes:previous.notes||'',preferred_driver_id:pastDriver.id,preferred_driver_name:pastDriver.name,preferred_only:true});
+    setJob({...EMPTY_JOB,vehicle_info:previous.vehicle_info||last.vehicle_info||'',pickup_location:previous.pickup_location||last.pickup_location||'',delivery_location:previous.delivery_location||last.delivery_location||'',return_plan:previous.return_plan||last.return_plan||'',estimated_hours:previous.estimated_hours||last.estimated_hours||2,minimum_rate:previous.minimum_rate||previous.target_rate||last.accepted_rate||20,payment_method:previous.payment_method||last.payment_method||'Relay wallet',notes:previous.notes||last.job_notes||'',preferred_driver_id:pastDriver.id,preferred_driver_name:pastDriver.name,preferred_only:true});
     setJobModal(true);
   };
 
   const postJob=async(e)=>{
     e.preventDefault();setSaving(true);
-    const optimistic={...job,estimated_hours:Number(job.estimated_hours),minimum_rate:Number(job.minimum_rate),target_rate:Number(job.minimum_rate),is_lease_return:job.return_plan==='Lease return provided',uber_driver_back:job.return_plan==='Broker will Uber driver back',broker_id:user.id,broker_name:user.full_name||user.email,status:'open',id:`temp-${Date.now()}`,created_date:new Date().toISOString()};
+    const hasPriorityWindow=!job.preferred_only&&favorites.length>0;
+    const optimistic={...job,estimated_hours:Number(job.estimated_hours),minimum_rate:Number(job.minimum_rate),target_rate:Number(job.minimum_rate),is_lease_return:job.return_plan==='Lease return provided',uber_driver_back:job.return_plan==='Broker will Uber driver back',broker_id:user.id,broker_name:user.full_name||user.email,status:'open',priority_until:hasPriorityWindow?new Date(Date.now()+PRIORITY_WINDOW_MINUTES*60000).toISOString():null,id:`temp-${Date.now()}`,created_date:new Date().toISOString()};
     setDeals([optimistic,...deals]);
-    setJob(EMPTY_JOB);setJobModal(false);notify('Job posted — drivers can now bid');
+    setJob(EMPTY_JOB);setJobModal(false);notify(hasPriorityWindow?`Job posted — your ${favorites.length} favorite driver${favorites.length===1?'':'s'} get first access for ${PRIORITY_WINDOW_MINUTES} minutes`:'Job posted — drivers can now bid');
     try{
       await base44.entities.Deal.create(optimistic);
       await load();
@@ -298,7 +345,9 @@ export default function DriveBid(){
     const d=allDrivers.find(x=>x.created_by_id===bid.driver_id);
     const completed=Number(bid.completed_jobs??d?.completed_deliveries??0);
     const cancelled=Number(d?.cancelled_trips||0);
-    return {name:publicDriverName(bid.driver_name||d?.full_name||'Verified driver'),operatingArea:bid.driver_operating_area||d?.operating_area||d?.home_location||'Area not provided',vetted:(bid.vetting_status||d?.status)==='approved',rating:Number(bid.driver_rating??d?.rating??5),completed,onTime:Number(bid.on_time_percentage??d?.on_time_percentage??100),cancellationRate:Number(bid.cancellation_rate??((completed+cancelled)>0?(cancelled/(completed+cancelled))*100:0)),experience:bid.relevant_experience||[d?.years_experience!=null?`${d.years_experience} years experience`:null,d?.vehicle_types,redactContactInfo(d?.bio)||null].filter(Boolean).join(' · ')||'Verified delivery driver'};
+    const rating=Number(bid.driver_rating??d?.rating??5);
+    const onTime=Number(bid.on_time_percentage??d?.on_time_percentage??100);
+    return {name:publicDriverName(bid.driver_name||d?.full_name||'Verified driver'),operatingArea:bid.driver_operating_area||d?.operating_area||d?.home_location||'Area not provided',vetted:(bid.vetting_status||d?.status)==='approved',rating,completed,onTime,cancellationRate:Number(bid.cancellation_rate??((completed+cancelled)>0?(cancelled/(completed+cancelled))*100:0)),badges:computeDriverBadges({completed_deliveries:completed,rating,review_count:d?.review_count,on_time_percentage:onTime,cancelled_trips:cancelled}),experience:bid.relevant_experience||[d?.years_experience!=null?`${d.years_experience} years experience`:null,d?.vehicle_types,redactContactInfo(d?.bio)||null].filter(Boolean).join(' · ')||'Verified delivery driver'};
   };
   const rankedBids=useMemo(()=>{
     if(!selected)return [];
@@ -332,17 +381,19 @@ export default function DriveBid(){
       <PullToRefresh onRefresh={load}>
       {impersonating&&<div className="db-trip-notice"><strong>Admin preview:</strong> You are viewing and acting as {user?.full_name||user?.email} ({role}). Changes are recorded under this account. <button className="db-link-btn" style={{marginLeft:8}} onClick={()=>navigate('/admin')}>Exit to admin</button></div>}
       {role==='driver'&&view==='vetting'?<VettingView driver={driver} progress={progress} onBack={()=>setView('jobs')} onSubmit={submitVetting} saving={saving} user={user}/>:
-      role==='broker'?<BrokerView deals={shownBrokerDeals} bids={bids} bidCount={bidCount} lowestBid={lowestBid} onPost={openPost} onView={(deal)=>{setSelected(deal);setBidsModal(true)}} activeTrips={activeTrips} completedTrips={completedTrips} pastDrivers={pastDrivers} cancelledDeals={cancelledDeals} jobCounts={brokerJobCounts} onRepost={repostDeal} onBrokerCancel={brokerCancelJob} onOpenTrip={()=>navigate('/trips')} onBookAgain={bookAgain} busy={saving} isIndividual={user?.account_type==='individual'}/>:
+      role==='broker'?<BrokerView deals={shownBrokerDeals} bids={bids} bidCount={bidCount} lowestBid={lowestBid} onPost={openPost} onView={(deal)=>{setSelected(deal);setBidsModal(true)}} activeTrips={activeTrips} completedTrips={completedTrips} pastDrivers={pastDrivers} favorites={favorites} savedRoutes={savedRoutes} cancelledDeals={cancelledDeals} jobCounts={brokerJobCounts} onRepost={repostDeal} onBrokerCancel={brokerCancelJob} onOpenTrip={()=>navigate('/trips')} onBookAgain={bookAgain} onToggleFavorite={toggleFavorite} onDeleteRoute={deleteRoute} busy={saving} isIndividual={user?.account_type==='individual'}/>:
       <DriverView deals={openDeals} bidCount={bidCount} lowestBid={lowestBid} driver={driver} approved={approved} onVetting={()=>setView('vetting')} onBid={openBid} acceptedBids={acceptedBids} onCancelBid={setCancelBidTarget} busy={saving} onGoToTrips={()=>navigate('/trips')}/>}
     </PullToRefresh></main>
 
     {jobModal&&<Modal title="Post a delivery" onClose={()=>setJobModal(false)}>
       <form className="db-form" onSubmit={postJob}>
         {job.preferred_only&&<div className="db-alert"><div className="db-alert-icon">✓</div><div><strong>Preferred-driver invitation</strong><p>This opportunity will be visible only to {job.preferred_driver_name}. Remove the preference to post it to the full load board.</p></div><button type="button" className="db-link-btn" onClick={()=>setJob({...job,preferred_driver_id:'',preferred_driver_name:'',preferred_only:false})}>Post publicly instead</button></div>}
+        {savedRoutes.length>0&&<Field label="Use a saved route" full><MobileSelect value="" onChange={v=>{const r=savedRoutes.find(x=>x.id===v);if(r)setJob({...job,pickup_location:r.pickup_location,delivery_location:r.delivery_location});}} placeholder="Select a saved route"><option value="">Select a saved route (optional)</option>{savedRoutes.map(r=><option value={r.id} key={r.id}>{r.label||`${r.pickup_location} → ${r.delivery_location}`}</option>)}</MobileSelect></Field>}
         <div className="db-form-grid">
           <Field label="Vehicle" full><input value={job.vehicle_info} onChange={e=>setJob({...job,vehicle_info:e.target.value})} placeholder="2026 BMW X3" required/></Field>
           <Field label="Pickup location"><input value={job.pickup_location} onChange={e=>setJob({...job,pickup_location:e.target.value})} placeholder="Dealership or full address" required/></Field>
           <Field label="Delivery location"><input value={job.delivery_location} onChange={e=>setJob({...job,delivery_location:e.target.value})} placeholder="Customer or full address" required/></Field>
+          <Field label="Route" full><button type="button" className="db-link-btn" onClick={saveRoute}>☆ Save this route for next time</button></Field>
           <Field label="Pickup date"><input type="date" value={job.pickup_date} onChange={e=>setJob({...job,pickup_date:e.target.value})} required/></Field>
           <Field label="Pickup window"><input type="time" value={job.pickup_time} onChange={e=>setJob({...job,pickup_time:e.target.value})} required/></Field>
           <Field label="Driver’s return arrangement" full><MobileSelect value={job.return_plan} onChange={v=>setJob({...job,return_plan:v})} placeholder="Select one" required><option value="">Select one</option><option>Lease return provided</option><option>Broker will Uber driver back</option><option>Driver arranges own return</option></MobileSelect></Field>
@@ -371,7 +422,7 @@ export default function DriveBid(){
           return <div className={`db-bid-item db-bid-detailed ${index===0?'best-value':''}`} key={b.id}>
             <div className="db-bid-avatar">{(info.name||'D')[0].toUpperCase()}</div>
             <div className="db-bid-info">
-              <div className="db-bid-title"><strong>{info.name}</strong>{index===0&&<span className="db-best-value">Best Value</span>}<span className={`db-admin-status ${info.vetted?'approved':'pending'}`}>{info.vetted?'Vetted':'Pending review'}</span></div>
+              <div className="db-bid-title"><strong>{info.name}</strong>{index===0&&<span className="db-best-value">Best Value</span>}<span className={`db-admin-status ${info.vetted?'approved':'pending'}`}>{info.vetted?'Vetted':'Pending review'}</span>{info.badges.map(b=><span key={b.key} className="db-chip" title={b.label}>{b.emoji} {b.label}</span>)}</div>
               <div className="db-bid-metrics">
                 <span><strong>${Number(b.hourly_rate||0).toFixed(2)}/hr</strong> Hourly rate</span>
                 <span><strong>${estimated.toFixed(2)}</strong> Estimated total</span>
@@ -383,7 +434,10 @@ export default function DriveBid(){
               <small className="db-bid-experience"><strong>Operating area:</strong> {info.operatingArea}</small>
               <small className="db-bid-experience"><strong>Relevant experience:</strong> {info.experience}</small>
             </div>
-            {b.status==='pending'?<div className="db-inline-actions db-bid-actions"><button className="db-small-btn" disabled={saving} onClick={()=>decideBid(b,'accepted')}>Accept bid</button><button className="db-small-btn" style={{background:'#fff0f1',color:'var(--db-danger)'}} disabled={saving} onClick={()=>decideBid(b,'rejected')}>Decline</button></div>:<span className={`db-admin-status ${b.status==='accepted'?'approved':'pending'}`}>{b.status}</span>}
+            <div className="db-inline-actions db-bid-actions" style={{flexDirection:'column',alignItems:'stretch',gap:6}}>
+              <button className="db-link-btn" onClick={()=>toggleFavorite(b.driver_id,info.name)}>{favorites.some(f=>f.driver_id===b.driver_id)?'★ Favorited':'☆ Add to favorites'}</button>
+              {b.status==='pending'?<div className="db-inline-actions"><button className="db-small-btn" disabled={saving} onClick={()=>decideBid(b,'accepted')}>Accept bid</button><button className="db-small-btn" style={{background:'#fff0f1',color:'var(--db-danger)'}} disabled={saving} onClick={()=>decideBid(b,'rejected')}>Decline</button></div>:<span className={`db-admin-status ${b.status==='accepted'?'approved':'pending'}`}>{b.status}</span>}
+            </div>
           </div>;
         })}
       </div>
@@ -394,13 +448,17 @@ export default function DriveBid(){
   </div>;
 }
 
-function BrokerView({deals,bids,bidCount,lowestBid,onPost,onView,activeTrips,completedTrips,pastDrivers,cancelledDeals,jobCounts,onRepost,onBrokerCancel,onOpenTrip,onBookAgain,busy,isIndividual}){
+function BrokerView({deals,bids,bidCount,lowestBid,onPost,onView,activeTrips,completedTrips,pastDrivers,favorites,savedRoutes,cancelledDeals,jobCounts,onRepost,onBrokerCancel,onOpenTrip,onBookAgain,onToggleFavorite,onDeleteRoute,busy,isIndividual}){
   return <><div className="db-heading-row"><div><div className="db-eyebrow">{isIndividual?'Your workspace':'Broker workspace'}</div><h1>Delivery jobs</h1><p>Post a route, track active trips, and review drivers you've worked with.</p></div><button className="db-button" onClick={onPost}>+ Post a delivery</button></div>
   {activeTrips?.length>0&&<section className="db-panel" style={{marginBottom:22}}><div className="db-panel-head"><h2>Active trips</h2><span className="db-count">{activeTrips.length}</span></div><div className="db-side-body">{activeTrips.map(t=>{const started=t.status==='in_progress';return <div key={t.id} style={{marginBottom:12}}><div className={`db-alert ${started?'':'pending'}`} style={{marginBottom:6}}><div className="db-alert-icon">{started?'✓':'!'}</div><div><strong>{started?'Driver has started the job':'Trip assigned — waiting for driver to start'}</strong><p>{t.vehicle_info||'Vehicle'} · {t.pickup_location||'—'} → {t.delivery_location||'—'} · Driver: {t.driver_name||'—'}</p></div></div><div className="db-inline-actions"><button className="db-button secondary" onClick={()=>onOpenTrip(t)}>View details</button><button className="db-button danger" disabled={busy} onClick={()=>onBrokerCancel(t)}>Cancel job</button></div></div>;})}</div></section>}
   {completedTrips?.length>0&&<section className="db-panel" style={{marginBottom:22}}><div className="db-panel-head"><h2>Past jobs</h2><span className="db-count">{completedTrips.length}</span></div><div className="db-side-body">{completedTrips.map(t=><div key={t.id} style={{marginBottom:12}}><div className="db-alert" style={{marginBottom:6}}><div className="db-alert-icon">✓</div><div><strong>{t.vehicle_info||'Vehicle'}</strong><p>{t.pickup_location||'—'} → {t.delivery_location||'—'} · Driver: {t.driver_name||'—'}{t.completed_at?` · ${new Date(t.completed_at).toLocaleDateString()}`:''}</p></div></div><button className="db-button secondary" onClick={()=>onOpenTrip(t)}>View details & pay</button></div>)}</div></section>}
   {cancelledDeals?.length>0&&<section className="db-panel" style={{marginBottom:22}}><div className="db-panel-head"><h2>Cancelled jobs</h2><span className="db-count">{cancelledDeals.length}</span></div><div className="db-side-body">{cancelledDeals.map(d=><div key={d.id} style={{marginBottom:12}}><div className="db-alert pending" style={{marginBottom:6}}><div className="db-alert-icon">!</div><div><strong>{d.cancelled_by==='driver'?'Driver cancelled — repost available':d.vehicle_info||'Vehicle'}</strong><p>{d.pickup_location||'—'} → {d.delivery_location||'—'} · {d.cancelled_by==='driver'?'The cancellation was recorded on the driver’s profile. Post a fresh copy to alert the load board.':'This job was cancelled and can be reposted.'}</p></div></div><button className="db-button secondary" onClick={()=>onRepost(d)}>Repost to load board</button></div>)}</div></section>}
   <div className="db-grid"><div className="db-panel"><div className="db-panel-head"><h2>Posted jobs</h2><span className="db-count">{deals.length} open</span></div><div className="db-job-list">{deals.length?deals.map(d=><JobCard key={d.id} deal={d} count={bidCount(d.id)} low={lowestBid(d.id)} action="View bids" onAction={()=>onView(d)}/>):<Empty broker/>}</div></div>
-  <aside className="db-panel"><div className="db-panel-head"><h2>At a glance</h2></div><div className="db-stats"><Stat value={jobCounts?.open??deals.length} label="Open jobs"/><Stat value={jobCounts?.assigned??0} label="Assigned jobs"/><Stat value={jobCounts?.completed??0} label="Completed jobs"/></div><div className="db-side-body"><div className="db-mini-title">Drivers you've used</div>{pastDrivers?.length?pastDrivers.map(d=><div className="db-status-row" key={d.id} style={{alignItems:'flex-start'}}><div><strong>{d.name}</strong><small style={{display:'block',color:'var(--db-muted)'}}>{d.trips} trip{d.trips===1?'':'s'}</small></div><button className="db-small-btn" onClick={()=>onBookAgain(d)}>Book again</button></div>):<div className="db-empty"><strong>No past drivers yet</strong>Drivers you've worked with appear here after a job is completed.</div>}</div></aside></div></>;
+  <aside className="db-panel"><div className="db-panel-head"><h2>At a glance</h2></div><div className="db-stats"><Stat value={jobCounts?.open??deals.length} label="Open jobs"/><Stat value={jobCounts?.assigned??0} label="Assigned jobs"/><Stat value={jobCounts?.completed??0} label="Completed jobs"/></div><div className="db-side-body">
+    <div className="db-mini-title">Favorite drivers</div>
+    {favorites?.length?favorites.map(f=>{const past=pastDrivers?.find(d=>d.id===f.driver_id);return <div className="db-status-row" key={f.id} style={{alignItems:'flex-start'}}><div><strong>{f.driver_name||past?.name||'Driver'}</strong>{past&&<small style={{display:'block',color:'var(--db-muted)'}}>{past.trips} trip{past.trips===1?'':'s'}</small>}</div><div className="db-inline-actions"><button className="db-small-btn" onClick={()=>onBookAgain(past||{id:f.driver_id,name:f.driver_name,lastTrip:{}})}>Book again</button><button className="db-small-btn" style={{background:'#fff0f1',color:'var(--db-danger)'}} onClick={()=>onToggleFavorite(f.driver_id,f.driver_name)}>Remove</button></div></div>;}):<div className="db-empty"><strong>No favorites yet</strong>Star a driver from their bid to build your go-to roster.</div>}
+    <div className="db-mini-title">Drivers you've used</div>{pastDrivers?.length?pastDrivers.map(d=><div className="db-status-row" key={d.id} style={{alignItems:'flex-start'}}><div><strong>{d.name}</strong><small style={{display:'block',color:'var(--db-muted)'}}>{d.trips} trip{d.trips===1?'':'s'}</small></div><button className="db-small-btn" onClick={()=>onBookAgain(d)}>Book again</button></div>):<div className="db-empty"><strong>No past drivers yet</strong>Drivers you've worked with appear here after a job is completed.</div>}
+    <div className="db-mini-title">Saved routes</div>{savedRoutes?.length?savedRoutes.map(r=><div className="db-status-row" key={r.id} style={{alignItems:'flex-start'}}><div><strong>{r.label||`${r.pickup_location} → ${r.delivery_location}`}</strong></div><button className="db-small-btn" style={{background:'#fff0f1',color:'var(--db-danger)'}} onClick={()=>onDeleteRoute(r.id)}>Remove</button></div>):<div className="db-empty"><strong>No saved routes yet</strong>Save a route while posting a job to reuse it later.</div>}</div></aside></div></>;
 }
 
 function DriverView({deals,bidCount,lowestBid,driver,approved,onVetting,onBid,acceptedBids,onCancelBid,busy,onGoToTrips}){
@@ -421,7 +479,7 @@ function VettingView({driver,progress,onBack,onSubmit,saving,user}){
 
 function JobCard({deal,count,low,action,onAction}){
   const date=[deal.pickup_date,deal.pickup_time].filter(Boolean).join(' · ')||'Time pending';
-  return <article className="db-job"><div className="db-job-top"><div className="db-route"><div className="db-route-line"><span className="db-dot"/><span className="db-stem"/><span className="db-dot end"/></div><div><strong>{deal.pickup_location}</strong><small>Pickup</small><div style={{height:13}}/><strong>{deal.delivery_location}</strong><small>Delivery</small></div></div><div className="db-job-price"><strong>{low?`$${low}/hr`:'No bids'}</strong><span>{low?'current low bid':'be the first'}</span></div></div><div className="db-chips"><span className="db-chip">{deal.vehicle_info||'Vehicle pending'}</span><span className="db-chip">{date}</span><span className="db-chip">Est. {deal.estimated_hours||'?'} hrs</span><span className="db-chip">{deal.return_plan||'Return plan pending'}</span>{deal.preferred_only&&<span className="db-chip">Preferred: {deal.preferred_driver_name||'selected driver'}</span>}</div>{deal.notes&&<p className="db-job-meta" style={{margin:'0 0 13px'}}>{deal.notes}</p>}<div className="db-job-footer"><span className="db-job-meta">{count} bid{count===1?'':'s'} · Minimum ${deal.minimum_rate||deal.target_rate||0}/hr</span><button className="db-link-btn" onClick={onAction}>{action}</button></div></article>;
+  return <article className="db-job"><div className="db-job-top"><div className="db-route"><div className="db-route-line"><span className="db-dot"/><span className="db-stem"/><span className="db-dot end"/></div><div><strong>{deal.pickup_location}</strong><small>Pickup</small><div style={{height:13}}/><strong>{deal.delivery_location}</strong><small>Delivery</small></div></div><div className="db-job-price"><strong>{low?`$${low}/hr`:'No bids'}</strong><span>{low?'current low bid':'be the first'}</span></div></div><div className="db-chips"><span className="db-chip">{deal.vehicle_info||'Vehicle pending'}</span><span className="db-chip">{date}</span><span className="db-chip">Est. {deal.estimated_hours||'?'} hrs</span><span className="db-chip">{deal.return_plan||'Return plan pending'}</span>{deal.preferred_only&&<span className="db-chip">Preferred: {deal.preferred_driver_name||'selected driver'}</span>}{deal.priority_until&&new Date(deal.priority_until)>new Date()&&<span className="db-chip">⭐ Favorites get early access until {new Date(deal.priority_until).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</span>}</div>{deal.notes&&<p className="db-job-meta" style={{margin:'0 0 13px'}}>{deal.notes}</p>}<div className="db-job-footer"><span className="db-job-meta">{count} bid{count===1?'':'s'} · Minimum ${deal.minimum_rate||deal.target_rate||0}/hr</span><button className="db-link-btn" onClick={onAction}>{action}</button></div></article>;
 }
 function Empty({broker=false}){return <div className="db-empty"><strong>{broker?'No delivery jobs posted':'No open jobs right now'}</strong>{broker?'Post your first route to alert vetted drivers.':'You will be alerted when a broker posts a route.'}</div>}
 function Stat({value,label}){return <div className="db-stat"><strong>{value}</strong><span>{label}</span></div>}

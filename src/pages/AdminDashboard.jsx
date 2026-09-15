@@ -150,8 +150,8 @@ export default function AdminDashboard(){
         if(!existingTrips[0])await base44.entities.Trip.create({
           deal_id:deal.id,bid_id:bid.id,broker_id:deal.broker_id,broker_name:deal.broker_name,
           driver_id:bid.driver_id,driver_name:bid.driver_name,vehicle_info:deal.vehicle_info,
-          pickup_location:deal.pickup_location,delivery_location:deal.delivery_location,
-          accepted_rate:Number(bid.hourly_rate),status:'scheduled',tracked_minutes:0
+          pickup_location:deal.pickup_location,delivery_location:deal.delivery_location,pickup_date:deal.pickup_date,pickup_time:deal.pickup_time,
+          accepted_rate:Number(bid.hourly_rate),estimated_hours:Number(deal.estimated_hours||0),return_plan:deal.return_plan,job_notes:deal.notes||'',payment_method:deal.payment_method||'Relay wallet',funding_status:'pending',status:'scheduled',tracked_minutes:0,cancellation_fee_status:'not_applicable'
         });
         const others=data.bids.filter(x=>x.deal_id===deal.id&&x.id!==bid.id&&x.status==='pending');
         await Promise.all(others.map(x=>base44.entities.Bid.update(x.id,{status:'rejected'})));

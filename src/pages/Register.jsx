@@ -1,11 +1,10 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { signUp, verifySignupOtp, resendSignupOtp, loginWithProvider, updateCurrentUser } from "@/lib/supabaseAuth";
+import { signUp, resendSignupOtp, loginWithProvider } from "@/lib/supabaseAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UserPlus, Mail, Lock, Loader2 } from "lucide-react";
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import AuthLayout from "@/components/AuthLayout";
 import GoogleIcon from "@/components/GoogleIcon";
 import AppleIcon from "@/components/AppleIcon";
@@ -19,8 +18,7 @@ export default function Register() {
   const [accountType, setAccountType] = useState("driver");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showOtp, setShowOtp] = useState(false);
-  const [otpCode, setOtpCode] = useState("");
+  const [showCheckEmail, setShowCheckEmail] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -31,26 +29,14 @@ export default function Register() {
     }
     setLoading(true);
     try {
+      // Picked up by AccountProfile.jsx's onboarding step once the driver
+      // confirms via the emailed link and lands there — same handoff the
+      // Google/Apple paths below already use.
+      sessionStorage.setItem('drivebid_signup_role', accountType);
       await signUp(email, password);
-      setShowOtp(true);
+      setShowCheckEmail(true);
     } catch (err) {
       setError(err.message || "Registration failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerify = async () => {
-    setError("");
-    setLoading(true);
-    try {
-      // Supabase confirms the email as part of a successful OTP verify —
-      // there's no separate "confirmation link" step to send afterward.
-      await verifySignupOtp(email, otpCode);
-      await updateCurrentUser({ account_type: accountType, terms_accepted_at: new Date().toISOString() });
-      window.location.href = "/profile?onboarding=1";
-    } catch (err) {
-      setError(err.message || "Invalid verification code");
     } finally {
       setLoading(false);
     }
@@ -61,11 +47,11 @@ export default function Register() {
     try {
       await resendSignupOtp(email);
       toast({
-        title: "Code sent",
-        description: "Check your email for the new code.",
+        title: "Email sent",
+        description: "Check your inbox for the confirmation link.",
       });
     } catch (err) {
-      setError(err.message || "Failed to resend code");
+      setError(err.message || "Failed to resend email");
     }
   };
 
@@ -79,52 +65,23 @@ export default function Register() {
     loginWithProvider("apple", window.location.origin + "/profile?onboarding=1");
   };
 
-  if (showOtp) {
+  if (showCheckEmail) {
     return (
       <AuthLayout
         icon={Mail}
-        title="Confirm your signup"
-        subtitle={`Enter the security code sent to ${email}. Relay will then email your confirmation link.`}
+        title="Check your email"
+        subtitle={`We sent a confirmation link to ${email}`}
       >
         {error && (
           <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
             {error}
           </div>
         )}
-        <div className="flex justify-center mb-6">
-          <InputOTP
-            maxLength={6}
-            value={otpCode}
-            onChange={setOtpCode}
-            autoFocus
-            autoComplete="one-time-code"
-          >
-            <InputOTPGroup>
-              <InputOTPSlot index={0} />
-              <InputOTPSlot index={1} />
-              <InputOTPSlot index={2} />
-              <InputOTPSlot index={3} />
-              <InputOTPSlot index={4} />
-              <InputOTPSlot index={5} />
-            </InputOTPGroup>
-          </InputOTP>
-        </div>
-        <Button
-          className="w-full h-12 font-medium"
-          onClick={handleVerify}
-          disabled={loading || otpCode.length < 6}
-        >
-          {loading ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Verifying...
-            </>
-          ) : (
-            "Continue"
-          )}
-        </Button>
-        <p className="text-center text-sm text-muted-foreground mt-4">
-          Didn't receive the code?{" "}
+        <p className="text-sm text-foreground text-center mb-6">
+          Click the link in that email to finish creating your account. You can close this tab.
+        </p>
+        <p className="text-center text-sm text-muted-foreground">
+          Didn't receive it?{" "}
           <button onClick={handleResend} className="text-primary font-medium hover:underline">
             Resend
           </button>

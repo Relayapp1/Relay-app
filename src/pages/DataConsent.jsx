@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { getCurrentUser, updateCurrentUser } from '@/lib/supabaseAuth';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import '@/drivebid.css';
 
@@ -16,7 +16,7 @@ export default function DataConsent() {
   const [message, setMessage] = useState('');
 
   useEffect(() => { (async () => {
-    try { setUser(await base44.auth.me()); }
+    try { setUser(await getCurrentUser()); }
     catch (error) { setMessage(error.message || 'Could not load your account'); }
     finally { setLoading(false); }
   })(); }, []);
@@ -25,7 +25,7 @@ export default function DataConsent() {
     if (!checked) { setMessage('Please check the box to confirm you’ve read and agree before continuing.'); return; }
     setSaving(true); setMessage('');
     try {
-      await base44.auth.updateMe({ data_consent_accepted_at: new Date().toISOString(), data_consent_version: CONSENT_VERSION });
+      await updateCurrentUser({ data_consent_accepted_at: new Date().toISOString(), data_consent_version: CONSENT_VERSION });
       navigate(returnTo, { replace: true });
     } catch (error) { setMessage(error.message || 'Could not save your consent'); }
     finally { setSaving(false); }

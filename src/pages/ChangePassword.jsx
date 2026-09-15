@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { changePassword } from '@/lib/supabaseAuth';
 import { useNavigate } from 'react-router-dom';
 import '@/drivebid.css';
 
@@ -17,8 +17,7 @@ export default function ChangePassword() {
     if (pwd.next.length < 8) { setError('New password must be at least 8 characters.'); return; }
     setSaving(true);
     try {
-      const me = await base44.auth.me();
-      await base44.auth.changePassword({ userId: me.id, currentPassword: pwd.current, newPassword: pwd.next });
+      await changePassword(pwd.current, pwd.next);
       setMessage('Password updated. Redirecting…');
       window.setTimeout(() => navigate('/profile'), 1200);
     } catch (err) {

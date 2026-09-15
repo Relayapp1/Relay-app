@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { base44 } from "@/api/base44Client";
+import { signUp, verifySignupOtp, resendSignupOtp, loginWithProvider, updateCurrentUser } from "@/lib/supabaseAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,7 +31,7 @@ export default function Register() {
     }
     setLoading(true);
     try {
-      await base44.auth.register({ email, password });
+      await signUp(email, password);
       setShowOtp(true);
     } catch (err) {
       setError(err.message || "Registration failed");
@@ -44,17 +44,10 @@ export default function Register() {
     setError("");
     setLoading(true);
     try {
-      const result = await base44.auth.verifyOtp({ email, otpCode });
-      if (result?.access_token) {
-        base44.auth.setToken(result.access_token);
-      }
-      await base44.auth.updateMe({ account_type: accountType, terms_accepted_at: new Date().toISOString() });
-      try {
-        await base44.functions.invoke("request-email-verification", {});
-        sessionStorage.setItem("drivebid_email_notice", "A confirmation link was sent to your email.");
-      } catch {
-        sessionStorage.setItem("drivebid_email_notice", "Your account was created. Send the confirmation link from your profile.");
-      }
+      // Supabase confirms the email as part of a successful OTP verify —
+      // there's no separate "confirmation link" step to send afterward.
+      await verifySignupOtp(email, otpCode);
+      await updateCurrentUser({ account_type: accountType, terms_accepted_at: new Date().toISOString() });
       window.location.href = "/profile?onboarding=1";
     } catch (err) {
       setError(err.message || "Invalid verification code");
@@ -66,7 +59,7 @@ export default function Register() {
   const handleResend = async () => {
     setError("");
     try {
-      await base44.auth.resendOtp(email);
+      await resendSignupOtp(email);
       toast({
         title: "Code sent",
         description: "Check your email for the new code.",
@@ -78,14 +71,12 @@ export default function Register() {
 
   const handleGoogle = () => {
     sessionStorage.setItem('drivebid_signup_role', accountType);
-    sessionStorage.setItem('drivebid_send_email_verification', '1');
-    base44.auth.loginWithProvider("google", window.location.origin + "/profile?onboarding=1");
+    loginWithProvider("google", window.location.origin + "/profile?onboarding=1");
   };
 
   const handleApple = () => {
     sessionStorage.setItem('drivebid_signup_role', accountType);
-    sessionStorage.setItem('drivebid_send_email_verification', '1');
-    base44.auth.loginWithProvider("apple", window.location.origin + "/profile?onboarding=1");
+    loginWithProvider("apple", window.location.origin + "/profile?onboarding=1");
   };
 
   if (showOtp) {

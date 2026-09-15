@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { entities } from '@/api/supabaseEntities';
+import { useSupabaseSubscription } from '@/hooks/useSupabaseSubscription';
 import { getWallet, requestDeposit, requestWithdrawal, money } from '@/lib/wallet';
 import '@/drivebid.css';
 
@@ -19,7 +20,7 @@ export default function WalletPanel({ user }) {
     try {
       const w = await getWallet(user);
       setWallet(w);
-      const t = await base44.entities.WalletTransaction.filter({ user_id: user.id }, '-created_date', 100);
+      const t = await entities.WalletTransaction.filter({ user_id: user.id }, '-created_date', 100);
       setTxns(t);
     } catch (e) {
       setMessage(e.message || 'Could not load wallet');
@@ -28,10 +29,7 @@ export default function WalletPanel({ user }) {
     }
   };
 
-  useEffect(() => {
-    const off = base44.entities.WalletTransaction.subscribe(() => load());
-    return () => off?.();
-  }, []);
+  useSupabaseSubscription('wallet_transactions', () => load());
 
   useEffect(() => { load(); }, []);
 

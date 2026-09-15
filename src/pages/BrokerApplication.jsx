@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { getCurrentUser } from '@/lib/supabaseAuth';
+import { entities } from '@/api/supabaseEntities';
+import { uploadPrivateFile } from '@/lib/supabaseStorage';
 import { useNavigate } from 'react-router-dom';
 import '@/drivebid.css';
 import { formatPhone } from '@/lib/phone';
@@ -15,9 +17,9 @@ export default function BrokerApplication(){
 
   useEffect(()=>{(async()=>{
     try{
-      const current=await base44.auth.me();
+      const current=await getCurrentUser();
       setUser(current);
-      const records=await base44.entities.Broker.filter({created_by_id:current.id},'-created_date',1);
+      const records=await entities.Broker.filter({created_by_id:current.id},'-created_date',1);
       if(records[0]){
         setProfile(records[0]);
         setForm({company:records[0].company||'',phone:formatPhone(records[0].phone||''),mc_number:records[0].mc_number||'',business_address:records[0].business_address||''});
@@ -34,10 +36,10 @@ export default function BrokerApplication(){
     try{
       const uploadField=async(name,existing)=>{
         const file=files.get(name);
-        if(file&&file.size){const uploaded=await base44.integrations.Core.UploadPrivateFile({file});return uploaded.file_uri;}
+        if(file&&file.size){return await uploadPrivateFile('broker-documents',`${user.id}/${Date.now()}-${file.name}`,file);}
         return existing||'';
       };
-      const payload={full_name:user.full_name||user.email,email:user.email,phone:form.phone,poster_type:isIndividual?'individual':'business'};
+      const payload={created_by_id:user.id,full_name:user.full_name||user.email,email:user.email,phone:form.phone,poster_type:isIndividual?'individual':'business'};
       if(isIndividual){
         payload.government_id_document=await uploadField('government_id_document',profile?.government_id_document);
       }else{
@@ -47,7 +49,7 @@ export default function BrokerApplication(){
         ]);
         Object.assign(payload,{company:form.company,mc_number:form.mc_number,business_address:form.business_address,w9_document,broker_license_document});
       }
-      const saved=profile?await base44.entities.Broker.update(profile.id,payload):await base44.entities.Broker.create(payload);
+      const saved=profile?await entities.Broker.update(profile.id,payload):await entities.Broker.create(payload);
       setProfile(saved);setMessage(saved.status==='approved'?'Profile updated.':'Application submitted. An administrator must approve it before jobs can be posted.');
     }catch(error){setMessage(error.message||'Could not save the application');}
     finally{setSaving(false);}

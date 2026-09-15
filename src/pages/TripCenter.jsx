@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { getCurrentUser } from '@/lib/supabaseAuth';
+import { entities } from '@/api/supabaseEntities';
+import { uploadPrivateFile, createSignedUrl } from '@/lib/supabaseStorage';
+import { useSupabaseSubscription } from '@/hooks/useSupabaseSubscription';
 import { useNavigate } from 'react-router-dom';
 import '@/drivebid.css';
 import MobileSelect from '@/components/MobileSelect';
@@ -67,16 +70,16 @@ export default function TripCenter(){
 
   const load=async()=>{
     try{
-      const current=await base44.auth.me();setUser(current);
+      const current=await getCurrentUser();setUser(current);
       const [asDriver,asBroker,allExpenses,reviews,allBids,allMessages,allLocations,allIncidents]=await Promise.all([
-        base44.entities.Trip.filter({driver_id:current.id},'-created_date',250),
-        base44.entities.Trip.filter({broker_id:current.id},'-created_date',250),
-        base44.entities.TripExpense.list('-created_date',500),
-        base44.entities.Review.filter({reviewer_id:current.id},'-created_date',250),
-        base44.entities.Bid.list('-created_date',500),
-        base44.entities.Message.list('-created_date',1000),
-        base44.entities.TripLocation.list('-recorded_at',2000),
-        base44.entities.TripIncident.list('-created_date',500)
+        entities.Trip.filter({driver_id:current.id},'-created_date',250),
+        entities.Trip.filter({broker_id:current.id},'-created_date',250),
+        entities.TripExpense.list('-created_date',500),
+        entities.Review.filter({reviewer_id:current.id},'-created_date',250),
+        entities.Bid.list('-created_date',500),
+        entities.Message.list('-created_date',1000),
+        entities.TripLocation.list('-recorded_at',2000),
+        entities.TripIncident.list('-created_date',500)
       ]);
       const merged=[...asDriver,...asBroker].filter((trip,index,array)=>array.findIndex(x=>x.id===trip.id)===index).sort((a,b)=>new Date(b.created_date)-new Date(a.created_date));
       setTrips(merged);setExpenses(allExpenses);setMyReviews(reviews);setBids(allBids);setMessages(allMessages);setLocations(allLocations);setIncidents(allIncidents);
@@ -91,20 +94,21 @@ export default function TripCenter(){
 
   useEffect(()=>{
     load();
-    const offTrips=base44.entities.Trip.subscribe(()=>load());
-    const offExpenses=base44.entities.TripExpense.subscribe(()=>load());
-    const offLocations=base44.entities.TripLocation.subscribe(()=>load());
-    const offIncidents=base44.entities.TripIncident.subscribe(()=>load());
-    const offMessages=base44.entities.Message.subscribe((event)=>{
-      if(event&&event.type==='create'&&event.data&&event.data.sender_id!==userIdRef.current&&event.data.trip_id!==chatTripRef.current){
-        setAlert(`New message from ${event.data.sender_name||event.data.sender_role}`);
-        window.setTimeout(()=>setAlert(''),5000);
-        if(typeof Notification!=='undefined'&&Notification.permission==='granted'){try{new Notification('Relay · New trip message',{body:event.data.content});}catch(e){}}
-      }
-      load();
-    });
-    return()=>{offTrips?.();offExpenses?.();offLocations?.();offIncidents?.();offMessages?.();if(watchRef.current!==null)navigator.geolocation?.clearWatch(watchRef.current);if(pollRef.current!==null)window.clearInterval(pollRef.current);};
+    return()=>{if(watchRef.current!==null)navigator.geolocation?.clearWatch(watchRef.current);if(pollRef.current!==null)window.clearInterval(pollRef.current);};
   },[]);
+
+  useSupabaseSubscription('trips',()=>load());
+  useSupabaseSubscription('trip_expenses',()=>load());
+  useSupabaseSubscription('trip_locations',()=>load());
+  useSupabaseSubscription('trip_incidents',()=>load());
+  useSupabaseSubscription('messages',(payload)=>{
+    if(payload.eventType==='INSERT'&&payload.new&&payload.new.sender_id!==userIdRef.current&&payload.new.trip_id!==chatTripRef.current){
+      setAlert(`New message from ${payload.new.sender_name||payload.new.sender_role}`);
+      window.setTimeout(()=>setAlert(''),5000);
+      if(typeof Notification!=='undefined'&&Notification.permission==='granted'){try{new Notification('Relay · New trip message',{body:payload.new.content});}catch(e){}}
+    }
+    load();
+  });
 
   useEffect(()=>{tripsRef.current=trips;},[trips]);
   useEffect(()=>{
@@ -147,7 +151,7 @@ export default function TripCenter(){
 
   const updateTrip=async(trip,changes)=>{
     setSaving(trip.id);setMessage('');
-    try{await base44.entities.Trip.update(trip.id,changes);await load();}
+    try{await entities.Trip.update(trip.id,changes);await load();}
     catch(error){await load();setMessage(error.message||'Could not update this trip');}
     finally{setSaving('');}
   };
@@ -188,8 +192,8 @@ export default function TripCenter(){
     setTrips(prev=>prev.map(t=>t.id===trip.id?{...t,...changes}:t));
     setSaving(trip.id);
     try{
-      await base44.entities.Trip.update(trip.id,changes);
-      await base44.entities.Deal.update(trip.deal_id,{status:'completed',completed_at:completedAt});
+      await entities.Trip.update(trip.id,changes);
+      await entities.Deal.update(trip.deal_id,{status:'completed',completed_at:completedAt});
       setMessage('Trip completed. The delivery record, hours, and expenses are ready for broker review.');await load();
     }catch(error){await load();setMessage(error.message||'Could not complete this trip');}
     finally{setSaving('');}
@@ -212,8 +216,7 @@ export default function TripCenter(){
     try{
       const upload=async(file,existing)=>{
         if(!file?.size)return existing||'';
-        const result=await base44.integrations.Core.UploadPrivateFile({file});
-        return result.file_uri;
+        return await uploadPrivateFile('trip-photos',`${proofTrip.id}/${Date.now()}-${file.name}`,file);
       };
       const [pickupPhoto,deliveryPhoto]=await Promise.all([
         upload(proof.pickup_photo,proofTrip.pickup_photo),
@@ -233,9 +236,9 @@ export default function TripCenter(){
     setSaving(pickupTrip.id);setMessage('');
     try{
       let pickupPhoto=pickupTrip.pickup_photo||'';
-      if(pickup.pickup_photo?.size){const uploaded=await base44.integrations.Core.UploadPrivateFile({file:pickup.pickup_photo});pickupPhoto=uploaded.file_uri;}
+      if(pickup.pickup_photo?.size){pickupPhoto=await uploadPrivateFile('trip-photos',`${pickupTrip.id}/${Date.now()}-${pickup.pickup_photo.name}`,pickup.pickup_photo);}
       if(!pickupPhoto){setMessage('Add a pickup-condition photo.');setSaving('');return;}
-      await base44.entities.Trip.update(pickupTrip.id,{pickup_odometer:Number(pickup.pickup_odometer),pickup_photo:pickupPhoto,pickup_condition_notes:pickup.pickup_condition_notes,pickup_condition_acknowledged:true,pickup_confirmed_at:new Date().toISOString()});
+      await entities.Trip.update(pickupTrip.id,{pickup_odometer:Number(pickup.pickup_odometer),pickup_photo:pickupPhoto,pickup_condition_notes:pickup.pickup_condition_notes,pickup_condition_acknowledged:true,pickup_confirmed_at:new Date().toISOString()});
       setPickupTrip(null);setPickup({pickup_odometer:'',pickup_photo:null,pickup_condition_notes:'',pickup_condition_acknowledged:false});setMessage('Pickup condition saved. The driver may start once funding is confirmed.');await load();
     }catch(error){setMessage(error.message||'Could not save pickup condition');}
     finally{setSaving('');}
@@ -267,9 +270,9 @@ export default function TripCenter(){
     e.preventDefault();setSaving(incidentTrip.id);
     try{
       let photo='';
-      if(incident.photo?.size){const uploaded=await base44.integrations.Core.UploadPrivateFile({file:incident.photo});photo=uploaded.file_uri;}
+      if(incident.photo?.size){photo=await uploadPrivateFile('trip-photos',`${incidentTrip.id}/${Date.now()}-${incident.photo.name}`,incident.photo);}
       const driverSide=incidentTrip.driver_id===user.id;
-      await base44.entities.TripIncident.create({trip_id:incidentTrip.id,broker_id:incidentTrip.broker_id,driver_id:incidentTrip.driver_id,reporter_id:user.id,reporter_role:driverSide?'driver':'broker',category:incident.category,description:incident.description,photo,status:'open'});
+      await entities.TripIncident.create({trip_id:incidentTrip.id,broker_id:incidentTrip.broker_id,driver_id:incidentTrip.driver_id,reporter_id:user.id,reporter_role:driverSide?'driver':'broker',category:incident.category,description:incident.description,photo,status:'open'});
       setIncidentTrip(null);setIncident({category:'vehicle_condition',description:'',photo:null});setMessage('Incident report saved and shared with the assigned parties and administrator.');await load();
     }catch(error){setMessage(error.message||'Could not submit incident');}
     finally{setSaving('');}
@@ -282,10 +285,10 @@ export default function TripCenter(){
     setSaving(trip.id);setMessage('');
     try{
       const accepted=bids.find(x=>x.deal_id===trip.deal_id&&x.driver_id===trip.driver_id&&x.status==='accepted');
-      if(accepted)await base44.entities.Bid.update(accepted.id,{status:'rejected'});
+      if(accepted)await entities.Bid.update(accepted.id,{status:'rejected'});
       await refundTripFunding(trip);
-      await base44.entities.Trip.update(trip.id,changes);
-      await base44.entities.Deal.update(trip.deal_id,{status:'cancelled',cancelled_by:'broker',cancelled_at:cancelledAt});
+      await entities.Trip.update(trip.id,changes);
+      await entities.Deal.update(trip.deal_id,{status:'cancelled',cancelled_by:'broker',cancelled_at:cancelledAt});
       setMessage('Trip cancelled.');await load();
     }catch(error){await load();setMessage(error.message||'Could not cancel trip');}
     finally{setSaving('');}
@@ -294,7 +297,7 @@ export default function TripCenter(){
   const saveTip=async(trip,amount)=>{
     const value=Math.max(0,Number(amount)||0);
     setSaving(trip.id);setMessage('');
-    try{await base44.entities.Trip.update(trip.id,{tip_amount:value});setMessage('Tip updated — total recalculated.');await load();}
+    try{await entities.Trip.update(trip.id,{tip_amount:value});setMessage('Tip updated — total recalculated.');await load();}
     catch(error){setMessage(error.message||'Could not update tip');}
     finally{setSaving('');}
   };
@@ -313,14 +316,14 @@ export default function TripCenter(){
 
   const confirmReceipt=async(trip)=>{
     setSaving(trip.id);setMessage('');
-    try{await base44.entities.Trip.update(trip.id,{payment_status:'received'});setMessage('Payment confirmed — chat is now closed.');await load();}
+    try{await entities.Trip.update(trip.id,{payment_status:'received'});setMessage('Payment confirmed — chat is now closed.');await load();}
     catch(error){setMessage(error.message||'Could not confirm payment');}
     finally{setSaving('');}
   };
 
   const setExpenseStatus=async(item,status)=>{
     setExpenses(prev=>prev.map(x=>x.id===item.id?{...x,status}:x));
-    try{await base44.entities.TripExpense.update(item.id,{status});await load();}
+    try{await entities.TripExpense.update(item.id,{status});await load();}
     catch(error){await load();setMessage(error.message||'Could not update expense');}
   };
 
@@ -329,7 +332,7 @@ export default function TripCenter(){
     if(!draft.trim())return;
     setSaving('chat');setMessage('');
     try{
-      await base44.entities.Message.create({
+      await entities.Message.create({
         trip_id:chatTrip.id,broker_id:chatTrip.broker_id,driver_id:chatTrip.driver_id,
         sender_id:user.id,sender_name:user.full_name||user.email,
         sender_role:chatTrip.driver_id===user.id?'driver':'broker',
@@ -347,8 +350,8 @@ export default function TripCenter(){
     try{
       const activeTrip=tripsRef.current.find(t=>t.id===tripId);
       const recordedAt=new Date().toISOString();
-      if(activeTrip)await base44.entities.TripLocation.create({trip_id:tripId,broker_id:activeTrip.broker_id,driver_id:activeTrip.driver_id,latitude:position.coords.latitude,longitude:position.coords.longitude,accuracy_meters:Number(position.coords.accuracy||0),recorded_at:recordedAt});
-      await base44.entities.Trip.update(tripId,{
+      if(activeTrip)await entities.TripLocation.create({trip_id:tripId,broker_id:activeTrip.broker_id,driver_id:activeTrip.driver_id,latitude:position.coords.latitude,longitude:position.coords.longitude,accuracy_meters:Number(position.coords.accuracy||0),recorded_at:recordedAt});
+      await entities.Trip.update(tripId,{
         current_latitude:position.coords.latitude,
         current_longitude:position.coords.longitude,
         last_location_at:recordedAt,
@@ -394,10 +397,9 @@ export default function TripCenter(){
     try{
       let receipt_document='';
       if(expense.receipt?.size){
-        const uploaded=await base44.integrations.Core.UploadPrivateFile({file:expense.receipt});
-        receipt_document=uploaded.file_uri;
+        receipt_document=await uploadPrivateFile('expense-receipts',`${expenseTrip.id}/${Date.now()}-${expense.receipt.name}`,expense.receipt);
       }
-      await base44.entities.TripExpense.create({
+      await entities.TripExpense.create({
         trip_id:expenseTrip.id,deal_id:expenseTrip.deal_id,driver_id:expenseTrip.driver_id,broker_id:expenseTrip.broker_id,
         category:expense.category,amount:Number(expense.amount),notes:expense.notes,expense_date:expense.expense_date,receipt_document
       });
@@ -409,8 +411,8 @@ export default function TripCenter(){
   const openDocument=async(uri)=>{
     if(!uri)return;
     try{
-      const result=uri.startsWith('http')?{url:uri}:await base44.integrations.Core.CreateFileSignedUrl({file_uri:uri});
-      window.open(result.signed_url||result.file_url||result.url,'_blank','noopener,noreferrer');
+      const url=uri.startsWith('http')?uri:await createSignedUrl(uri);
+      window.open(url,'_blank','noopener,noreferrer');
     }catch(error){setMessage(error.message||'Could not open receipt');}
   };
 

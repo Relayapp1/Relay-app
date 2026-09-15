@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { getCurrentUser, updateCurrentUser, logout } from '@/lib/supabaseAuth';
+import { entities } from '@/api/supabaseEntities';
+import { createSignedUrl } from '@/lib/supabaseStorage';
 import { useNavigate } from 'react-router-dom';
 import '@/drivebid.css';
 import { isDriveBidOwner } from '@/lib/ownerAccess';
@@ -36,11 +38,11 @@ export default function AdminDashboard(){
   const load=async()=>{
     setError('');
     try{
-      const user=await base44.auth.me();
+      const user=await getCurrentUser();
       setMe(user);
       if(!isDriveBidOwner(user)){setLoading(false);return;}
       const results=await Promise.allSettled(
-        ENTITY_KEYS.map(key=>base44.entities[ENTITY_NAMES[key]].list('-created_date',PAGE_SIZE+1))
+        ENTITY_KEYS.map(key=>entities[ENTITY_NAMES[key]].list('-created_date',PAGE_SIZE+1))
       );
       const newData={};const more={};
       results.forEach((result,i)=>{
@@ -63,8 +65,8 @@ export default function AdminDashboard(){
           if(!hasMore[key])return Promise.resolve([]);
           const records=data[key];
           const oldest=records.length?records[records.length-1].created_date:null;
-          if(!oldest)return base44.entities[ENTITY_NAMES[key]].list('-created_date',PAGE_SIZE+1);
-          return base44.entities[ENTITY_NAMES[key]].filter({created_date:{$lt:oldest}},'-created_date',PAGE_SIZE+1);
+          if(!oldest)return entities[ENTITY_NAMES[key]].list('-created_date',PAGE_SIZE+1);
+          return entities[ENTITY_NAMES[key]].filter({created_date:{$lt:oldest}},'-created_date',PAGE_SIZE+1);
         })
       );
       const appended={};const more={...hasMore};
@@ -83,7 +85,7 @@ export default function AdminDashboard(){
   useEffect(()=>{load();},[]);
 
   const removeBrokerRole=async()=>{
-    try{await base44.auth.updateMe({account_type:'admin'});setError('Your broker role has been removed.');await load();}
+    try{await updateCurrentUser({account_type:'admin'});setError('Your broker role has been removed.');await load();}
     catch(err){setError(err.message||'Could not update your role');}
   };
 
@@ -92,7 +94,7 @@ export default function AdminDashboard(){
     const key=entity.toLowerCase()+'s';
     setData(prev=>({...prev,[key]:prev[key].map(r=>r.id===record.id?{...r,status}:r)}));
     try{
-      await base44.entities[entity].update(record.id,{status});
+      await entities[entity].update(record.id,{status});
       await load();
     }catch(err){await load();setError(err.message||`Could not update ${entity.toLowerCase()}`);}
     finally{setSaving('');}
@@ -100,7 +102,7 @@ export default function AdminDashboard(){
 
   const saveJob=async(id,changes)=>{
     setSaving(`job-${id}`);
-    try{ await base44.entities.Deal.update(id,changes); await load(); setError('Job updated.'); }
+    try{ await entities.Deal.update(id,changes); await load(); setError('Job updated.'); }
     catch(err){ setError(err.message||'Could not update job'); }
     finally{ setSaving(''); }
   };
@@ -108,7 +110,7 @@ export default function AdminDashboard(){
   const createJob=async(payload)=>{
     setSaving('job-new');
     try{
-      await base44.entities.Deal.create({ ...payload, broker_id: me.id, broker_name: me.full_name||me.email });
+      await entities.Deal.create({ ...payload, broker_id: me.id, broker_name: me.full_name||me.email });
       await load(); setError('Job posted to the load board.');
     }catch(err){ setError(err.message||'Could not post job'); }
     finally{ setSaving(''); }
@@ -116,7 +118,7 @@ export default function AdminDashboard(){
 
   const deleteJob=async(id)=>{
     setSaving(`job-${id}`);
-    try{ await base44.entities.Deal.delete(id); await load(); setError('Job deleted.'); }
+    try{ await entities.Deal.delete(id); await load(); setError('Job deleted.'); }
     catch(err){ setError(err.message||'Could not delete job'); }
     finally{ setSaving(''); }
   };
@@ -128,10 +130,10 @@ export default function AdminDashboard(){
       if(trip){
         if(trip.funding_status==='confirmed')await refundTripFunding(trip);
         const acceptedBid=data.bids.find(b=>b.deal_id===deal.id&&b.driver_id===trip.driver_id&&b.status==='accepted');
-        if(acceptedBid)await base44.entities.Bid.update(acceptedBid.id,{status:'rejected'});
-        await base44.entities.Trip.update(trip.id,{status:'cancelled',cancelled_by:'admin',timer_started_at:null});
+        if(acceptedBid)await entities.Bid.update(acceptedBid.id,{status:'rejected'});
+        await entities.Trip.update(trip.id,{status:'cancelled',cancelled_by:'admin',timer_started_at:null});
       }
-      await base44.entities.Deal.update(deal.id,{status:'cancelled',cancelled_by:'admin'});
+      await entities.Deal.update(deal.id,{status:'cancelled',cancelled_by:'admin'});
       await load();
       setError(trip?'Job and its active trip were cancelled. Any reserved funding was refunded.':'Job cancelled.');
     }catch(err){ setError(err.message||'Could not cancel job'); }
@@ -143,18 +145,18 @@ export default function AdminDashboard(){
     setData(prev=>({...prev,bids:prev.bids.map(b=>b.id===bid.id?{...b,status}:b)}));
     if(status==='accepted'){setData(prev=>({...prev,deals:prev.deals.map(d=>d.id===deal.id?{...d,status:'assigned',assigned_driver_id:bid.driver_id,accepted_bid_id:bid.id}:d)}));}
     try{
-      await base44.entities.Bid.update(bid.id,{status});
+      await entities.Bid.update(bid.id,{status});
       if(status==='accepted'){
-        await base44.entities.Deal.update(deal.id,{status:'assigned',assigned_driver_id:bid.driver_id,accepted_bid_id:bid.id});
-        const existingTrips=await base44.entities.Trip.filter({bid_id:bid.id},'-created_date',1);
-        if(!existingTrips[0])await base44.entities.Trip.create({
+        await entities.Deal.update(deal.id,{status:'assigned',assigned_driver_id:bid.driver_id,accepted_bid_id:bid.id});
+        const existingTrips=await entities.Trip.filter({bid_id:bid.id},'-created_date',1);
+        if(!existingTrips[0])await entities.Trip.create({
           deal_id:deal.id,bid_id:bid.id,broker_id:deal.broker_id,broker_name:deal.broker_name,
           driver_id:bid.driver_id,driver_name:bid.driver_name,vehicle_info:deal.vehicle_info,
           pickup_location:deal.pickup_location,delivery_location:deal.delivery_location,pickup_date:deal.pickup_date,pickup_time:deal.pickup_time,
           accepted_rate:Number(bid.hourly_rate),estimated_hours:Number(deal.estimated_hours||0),return_plan:deal.return_plan,job_notes:deal.notes||'',payment_method:deal.payment_method||'Relay wallet',funding_status:'pending',status:'scheduled',tracked_minutes:0,cancellation_fee_status:'not_applicable'
         });
         const others=data.bids.filter(x=>x.deal_id===deal.id&&x.id!==bid.id&&x.status==='pending');
-        await Promise.all(others.map(x=>base44.entities.Bid.update(x.id,{status:'rejected'})));
+        await Promise.all(others.map(x=>entities.Bid.update(x.id,{status:'rejected'})));
       }
       setError(status==='accepted'?'Bid accepted on behalf of broker.':'Bid declined.');
       await load();
@@ -168,8 +170,8 @@ export default function AdminDashboard(){
       if(uri.startsWith('http')){
         window.open(uri,'_blank','noopener,noreferrer');
       }else{
-        const result=await base44.integrations.Core.CreateFileSignedUrl({file_uri:uri});
-        window.open(result.signed_url||result.file_url||result.url,'_blank','noopener,noreferrer');
+        const signedUrl=await createSignedUrl(uri);
+        window.open(signedUrl,'_blank','noopener,noreferrer');
       }
     }catch(err){setError(err.message||'Could not open this private document');}
   };
@@ -185,9 +187,12 @@ export default function AdminDashboard(){
     const {entity,record}=selected;
     setSaving(`${entity}-info-${record.id}`);
     try{
-      const name=record.full_name||record.company||'applicant';
-      await base44.integrations.Core.SendEmail({to:record.email,subject:'Additional information needed — Relay application',body:`Hi ${name},\n\nThanks for applying to join Relay. Before we can finish reviewing your ${entity.toLowerCase()} application, we need a little more information. Please reply with any missing license or document details, or clarifications on your application.\n\nOnce we receive it, we'll continue your review right away.\n\n— Relay Review Team`});
-      setError(`Information request sent to ${record.email}`);
+      // TODO(migration): no transactional email provider wired up yet post-
+      // Supabase-migration (Base44's SendEmail integration had no direct
+      // equivalent) — needs Resend/Postmark/SES chosen and an Edge Function
+      // built before this can actually send. Surface that plainly rather
+      // than silently failing or fabricating success.
+      throw new Error('Email sending is not yet configured on the new backend — reach out to the applicant directly for now.');
     }catch(err){setError(err.message||'Could not send information request');}
     finally{setSaving('');}
   };
@@ -203,7 +208,7 @@ export default function AdminDashboard(){
     if(!resolutionText.trim()){setError('Add resolution notes before closing this incident.');return;}
     setSaving(`incident-${incident.id}`);
     try{
-      await base44.entities.TripIncident.update(incident.id,{status:'resolved',resolution_notes:resolutionText.trim(),resolved_at:new Date().toISOString()});
+      await entities.TripIncident.update(incident.id,{status:'resolved',resolution_notes:resolutionText.trim(),resolved_at:new Date().toISOString()});
       setResolvingIncident(null);setResolutionText('');await load();
     }catch(err){setError(err.message||'Could not resolve incident');}
     finally{setSaving('');}
@@ -250,7 +255,7 @@ export default function AdminDashboard(){
     </header>
     {menu&&<div className="db-user-menu">
       <button onClick={()=>{setMenu(false);navigate('/profile')}}>My profile</button>
-      <button onClick={()=>base44.auth.logout(window.location.origin+'/login')}>Sign out</button>
+      <button onClick={()=>logout(window.location.origin+'/login')}>Sign out</button>
     </div>}
     <main className="db-page">
       <div className="db-heading-row"><div><div className="db-eyebrow">Owner control center</div><h1>Admin dashboard</h1><p>Review approvals and monitor the full Relay marketplace.</p></div><div style={{display:'flex',gap:10,flexWrap:'wrap'}}>{isDriveBidOwner(me)&&me?.account_type==='broker'&&<button className="db-button secondary" onClick={removeBrokerRole}>Remove my broker role</button>}<button className="db-button secondary" onClick={refreshData} disabled={refreshing}>{refreshing?'Refreshing…':'Refresh data'}</button></div></div>

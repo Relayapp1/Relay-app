@@ -3,7 +3,6 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClientInstance } from '@/lib/query-client';
 import { BrowserRouter as Router, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
-import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ScrollToTop from './components/ScrollToTop';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { lazy, Suspense } from 'react';
@@ -34,12 +33,10 @@ function OwnerRoute({children}){
 }
 
 function AuthenticatedApp(){
-  const {isLoadingAuth,isLoadingPublicSettings,authError,navigateToLogin,user}=useAuth();
+  const {isLoadingAuth,authError,user}=useAuth();
   const location=useLocation();
-  if(isLoadingPublicSettings||isLoadingAuth)return <div className="db-loading"><div><div className="db-spinner"/><span>Loading Relay…</span></div></div>;
+  if(isLoadingAuth)return <div className="db-loading"><div><div className="db-spinner"/><span>Loading Relay…</span></div></div>;
   if(authError){
-    if(authError.type==='user_not_registered')return <UserNotRegisteredError/>;
-    if(authError.type==='auth_required'){navigateToLogin();return null;}
     const offline=typeof navigator!=='undefined'&&navigator.onLine===false;
     return <div className="db-shell"><main className="db-page" style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'80vh'}}><div className="db-panel db-admin-denied"><h1>{offline?"You're offline":'Something went wrong'}</h1><p>{offline?'Relay needs an internet connection. Check your connection and try again.':(authError.message||'We couldn’t load Relay. Please try again.')}</p><button className="db-button" onClick={()=>window.location.reload()}>Retry</button></div></main></div>;
   }

@@ -1,19 +1,16 @@
-import { base44 } from '@/api/base44Client';
+import { supabase } from '@/api/supabaseClient';
 
-async function call(payload) {
-  try {
-    const response = await base44.functions.invoke('trip-review', payload);
-    return response?.data ?? response;
-  } catch (error) {
-    throw new Error(error?.response?.data?.error || error?.message || 'Trip review failed');
-  }
+async function call(fn, params) {
+  const { data, error } = await supabase.rpc(fn, params);
+  if (error) throw new Error(error.message || 'Trip review failed');
+  return data;
 }
 
 export const approveTripDelivery = (trip) =>
-  call({ action: 'approve', trip_id: trip.id });
+  call('trip_review_approve', { p_trip_id: trip.id });
 
 export const disputeTripDelivery = (trip, reason) =>
-  call({ action: 'dispute', trip_id: trip.id, reason });
+  call('trip_review_dispute', { p_trip_id: trip.id, p_reason: reason });
 
 export const resolveTripDispute = (trip, resolution) =>
-  call({ action: 'resolve', trip_id: trip.id, resolution });
+  call('trip_review_resolve', { p_trip_id: trip.id, p_resolution: resolution });

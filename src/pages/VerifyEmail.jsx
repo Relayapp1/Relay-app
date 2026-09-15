@@ -1,30 +1,38 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { supabase } from '@/api/supabaseClient';
 import '@/drivebid.css';
 import '@/verification.css';
 
+// The primary signup path is Register.jsx's 6-digit OTP entry, which
+// confirms the email in the same step. This page is the fallback landing
+// spot for any Supabase auth email that instead links here (email change
+// confirmation, or a signup template using a link instead of a code) — the
+// Supabase client auto-processes the link's token into a session, so this
+// just reports whether that happened.
 export default function VerifyEmail(){
-  const [params]=useSearchParams();
   const [state,setState]=useState({status:'loading',message:'Confirming your email…'});
-  const started=useRef(false);
 
   useEffect(()=>{
-    if(started.current)return;
-    started.current=true;
-    const token=params.get('token')||'';
-    if(!token){setState({status:'error',message:'This verification link is missing its secure token.'});return;}
+    let subscription;
     (async()=>{
-      try{
-        const response=await base44.functions.invoke('confirm-email-verification',{token});
-        const result=response?.data??response;
-        if(!result?.success)throw new Error(result?.error||'Verification failed');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
         setState({status:'success',message:'Your email address has been verified.'});
-      }catch(error){
-        setState({status:'error',message:error?.response?.data?.error||error.message||'This link is invalid or expired.'});
+        return;
       }
+      const { data } = supabase.auth.onAuthStateChange((event) => {
+        if (event === 'SIGNED_IN') {
+          setState({status:'success',message:'Your email address has been verified.'});
+        }
+      });
+      subscription = data.subscription;
+      setTimeout(() => {
+        setState((s) => s.status === 'loading' ? {status:'error',message:'This link is invalid or expired.'} : s);
+      }, 4000);
     })();
-  },[params]);
+    return () => subscription?.unsubscribe();
+  },[]);
 
   return <div className="db-shell db-verification-page">
     <section className="db-panel db-verification-result">

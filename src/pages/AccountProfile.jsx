@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { getCurrentUser, updateCurrentUser, logout } from '@/lib/supabaseAuth';
+import { entities } from '@/api/supabaseEntities';
+import { createSignedUrl } from '@/lib/supabaseStorage';
+import { supabase } from '@/api/supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import '@/drivebid.css';
 import '@/verification.css';
@@ -25,38 +28,28 @@ export default function AccountProfile(){
   const [form,setForm]=useState({full_name:'',email:'',phone:'',operating_area:''});
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
-  const [sendingEmail,setSendingEmail]=useState(false);
   const [message,setMessage]=useState('');
   const [deleteModal,setDeleteModal]=useState(false);
   const [deleting,setDeleting]=useState(false);
 
   const load=async()=>{
     try{
-      let current=await base44.auth.me();
+      let current=await getCurrentUser();
       const pendingRole=sessionStorage.getItem('drivebid_signup_role');
       if(pendingRole&&['driver','broker','individual'].includes(pendingRole)){
-        current=await base44.auth.updateMe({account_type:pendingRole,terms_accepted_at:new Date().toISOString()});
+        current=await updateCurrentUser({account_type:pendingRole,terms_accepted_at:new Date().toISOString()});
         sessionStorage.removeItem('drivebid_signup_role');
       }
       setUser(current);
       setForm({full_name:current.display_name||current.full_name||'',email:current.contact_email||current.email||'',phone:formatPhone(current.phone||''),operating_area:''});
-      const notice=sessionStorage.getItem('drivebid_email_notice');
-      if(notice){setMessage(notice);sessionStorage.removeItem('drivebid_email_notice');}
-      if(sessionStorage.getItem('drivebid_send_email_verification')&& !current.email_link_verified){
-        sessionStorage.removeItem('drivebid_send_email_verification');
-        try{
-          await base44.functions.invoke('request-email-verification',{});
-          setMessage('A confirmation link was sent to your email.');
-        }catch(error){setMessage(error?.response?.data?.error||error.message||'Use the button below to send your verification link.');}
-      }
       const isPoster=current.account_type!=='driver';
       const entity=isPoster?'Broker':'Driver';
       const [profiles,ownTrips,ownExpenses,ownDeals,ownReviews]=await Promise.all([
-        base44.entities[entity].filter({created_by_id:current.id},'-created_date',1),
-        base44.entities.Trip.filter(isPoster?{broker_id:current.id}:{driver_id:current.id},'-created_date',250),
-        base44.entities.TripExpense.filter(isPoster?{broker_id:current.id}:{driver_id:current.id},'-created_date',500),
-        isPoster?base44.entities.Deal.filter({broker_id:current.id},'-created_date',500):Promise.resolve([]),
-        base44.entities.Review.filter({reviewee_id:current.id},'-created_date',100)
+        entities[entity].filter({created_by_id:current.id},'-created_date',1),
+        entities.Trip.filter(isPoster?{broker_id:current.id}:{driver_id:current.id},'-created_date',250),
+        entities.TripExpense.filter(isPoster?{broker_id:current.id}:{driver_id:current.id},'-created_date',500),
+        isPoster?entities.Deal.filter({broker_id:current.id},'-created_date',500):Promise.resolve([]),
+        entities.Review.filter({reviewee_id:current.id},'-created_date',100)
       ]);
       const prof=profiles[0]||null;
       setProfile(prof);setTrips(ownTrips);setExpenses(ownExpenses);setDeals(ownDeals);setReviews(ownReviews);
@@ -70,11 +63,11 @@ export default function AccountProfile(){
   const save=async(e)=>{
     e.preventDefault();setSaving(true);setMessage('');
     try{
-      const updated=await base44.auth.updateMe({phone:form.phone,display_name:form.full_name,contact_email:form.email});
+      const updated=await updateCurrentUser({phone:form.phone,display_name:form.full_name,contact_email:form.email});
       setUser(updated);
       if(profile){
         const entity=user.account_type!=='driver'?'Broker':'Driver';
-        const saved=await base44.entities[entity].update(profile.id,{full_name:form.full_name,phone:form.phone,email:form.email,...(entity==='Driver'?{operating_area:form.operating_area}:{})});
+        const saved=await entities[entity].update(profile.id,{full_name:form.full_name,phone:form.phone,email:form.email,...(entity==='Driver'?{operating_area:form.operating_area}:{})});
         setProfile(saved);
         setForm({full_name:saved.full_name||form.full_name,email:saved.email||form.email,phone:formatPhone(form.phone),operating_area:saved.operating_area||form.operating_area||''});
       }
@@ -83,22 +76,13 @@ export default function AccountProfile(){
     finally{setSaving(false);}
   };
 
-  const sendVerificationEmail=async()=>{
-    setSendingEmail(true);setMessage('');
-    try{
-      const response=await base44.functions.invoke('request-email-verification',{});
-      const result=response?.data??response;
-      setMessage(result?.already_verified?'Your email is already verified.':result?.recently_sent?'A link was sent recently. Check your inbox and spam folder.':'A secure confirmation link was sent to your email.');
-    }catch(error){setMessage(error?.response?.data?.error||error.message||'Could not send the verification email.');}
-    finally{setSendingEmail(false);}
-  };
-
   const deleteAccount=async()=>{
     setDeleting(true);setMessage('');
     try{
-      await base44.functions.invoke('delete-account',{});
-      await base44.auth.logout(window.location.origin+'/login');
-    }catch(error){setMessage(error?.response?.data?.error||error.message||'Could not delete account');setDeleting(false);}
+      const {error}=await supabase.functions.invoke('delete-account',{});
+      if(error)throw error;
+      await logout(window.location.origin+'/login');
+    }catch(error){setMessage(error.message||'Could not delete account');setDeleting(false);}
   };
 
   const exportStatement=()=>{
@@ -113,8 +97,8 @@ export default function AccountProfile(){
       if(uri.startsWith('http')){
         window.open(uri,'_blank','noopener,noreferrer');
       }else{
-        const result=await base44.integrations.Core.CreateFileSignedUrl({file_uri:uri});
-        window.open(result.signed_url||result.file_url||result.url,'_blank','noopener,noreferrer');
+        const signedUrl=await createSignedUrl(uri);
+        window.open(signedUrl,'_blank','noopener,noreferrer');
       }
     }catch(error){setMessage(error.message||'Could not open this document');}
   };
@@ -155,12 +139,12 @@ export default function AccountProfile(){
     <header className="db-topbar"><div className="db-brand"><div className="db-brandmark">R</div><span>Relay</span></div><button className="db-button secondary db-admin-back" onClick={()=>navigate(-1)}>← Back</button></header>
     <main className="db-page">
       <PullToRefresh onRefresh={load}/>
-      <div className="db-heading-row"><div><div className="db-eyebrow">{isAdmin?'Admin':isIndividual?'Individual':isBroker?'Broker':'Driver'} account</div><h1>My profile</h1><p>Your contact information, documents, activity, and reviews.</p></div><div style={{display:'flex',gap:10,flexWrap:'wrap'}}><button className="db-button secondary" onClick={()=>navigate('/')}>Marketplace</button>{!isPoster&&<button className="db-button secondary" onClick={()=>navigate('/trips')}>My trips</button>}{isDriveBidOwner(user)&&<button className="db-button secondary" onClick={()=>navigate('/admin')}>Admin</button>}<button className="db-button danger" onClick={()=>base44.auth.logout(window.location.origin+'/login')}>Sign out</button></div></div>
+      <div className="db-heading-row"><div><div className="db-eyebrow">{isAdmin?'Admin':isIndividual?'Individual':isBroker?'Broker':'Driver'} account</div><h1>My profile</h1><p>Your contact information, documents, activity, and reviews.</p></div><div style={{display:'flex',gap:10,flexWrap:'wrap'}}><button className="db-button secondary" onClick={()=>navigate('/')}>Marketplace</button>{!isPoster&&<button className="db-button secondary" onClick={()=>navigate('/trips')}>My trips</button>}{isDriveBidOwner(user)&&<button className="db-button secondary" onClick={()=>navigate('/admin')}>Admin</button>}<button className="db-button danger" onClick={()=>logout(window.location.origin+'/login')}>Sign out</button></div></div>
       {!profile&&!isAdmin&&<div className="db-alert pending"><div className="db-alert-icon">!</div><div><strong>{isIndividual?'Identity verification required':isBroker?'Broker vetting required':'Driver vetting required'}</strong><p>Your account profile is active. Complete vetting to use live marketplace features.</p></div></div>}
       <section className="db-panel db-verification-panel">
         <div className="db-panel-head"><h2>Contact verification</h2><span className="db-count">Security</span></div>
         <div className="db-verification-grid">
-          <div className="db-verification-item"><div className={`db-verification-badge ${user?.email_link_verified?'verified':''}`}>{user?.email_link_verified?'✓':'@'}</div><div><strong>Email address</strong><p>{user?.email||''}</p><small>{user?.email_link_verified?'Verified by confirmation link':'Confirmation link required'}</small></div>{!user?.email_link_verified&&<button className="db-link-btn" disabled={sendingEmail} onClick={sendVerificationEmail}>{sendingEmail?'Sending…':'Send verification link'}</button>}</div>
+          <div className="db-verification-item"><div className="db-verification-badge verified">✓</div><div><strong>Email address</strong><p>{user?.email||''}</p><small>Verified</small></div></div>
           <div className="db-verification-item"><div className="db-verification-badge">#</div><div><strong>Phone number</strong><p>{formatPhone(form.phone)||'Add a phone number below'}</p><small>SMS code verification will be added in the next phase.</small></div><span className="db-admin-status pending">Coming later</span></div>
         </div>
       </section>

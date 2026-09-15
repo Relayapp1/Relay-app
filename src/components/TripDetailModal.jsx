@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import React, { useCallback, useEffect, useState } from 'react';
+import { getCurrentUser } from '@/lib/supabaseAuth';
+import { entities } from '@/api/supabaseEntities';
+import { useSupabaseSubscription } from '@/hooks/useSupabaseSubscription';
 import { processTripPayment, refundTripFunding } from '@/lib/wallet';
 import { resolveTripDispute } from '@/lib/tripReview';
 import { motion } from 'framer-motion';
@@ -24,33 +26,36 @@ export default function TripDetailModal({ trip, deals, bids, onClose, onChanged 
   const [currentUser, setCurrentUser] = useState(null);
   const [resolution, setResolution] = useState('');
 
+  const load = useCallback(async () => {
+    if (!trip) return;
+    try {
+      const [exp, msgs, trips, me] = await Promise.all([
+        entities.TripExpense.filter({ trip_id: trip.id }, '-created_date', 200),
+        entities.Message.filter({ trip_id: trip.id }, '-created_date', 500),
+        entities.Trip.filter({ id: trip.id }, '-created_date', 1),
+        getCurrentUser()
+      ]);
+      setExpenses(exp);
+      setMessages(msgs);
+      setCurrentUser(me);
+      if (trips[0]) {
+        setLiveTrip(trips[0]);
+        setResolution(trips[0].dispute_resolution || '');
+      }
+    } catch (e) { setMessage(e.message || 'Could not load trip details'); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip && trip.id]);
+
   useEffect(() => {
     if (!trip) return;
-    let active = true;
     setLiveTrip(trip);
-    const load = async () => {
-      try {
-        const [exp, msgs, trips, me] = await Promise.all([
-          base44.entities.TripExpense.filter({ trip_id: trip.id }, '-created_date', 200),
-          base44.entities.Message.filter({ trip_id: trip.id }, '-created_date', 500),
-          base44.entities.Trip.filter({ id: trip.id }, '-created_date', 1),
-          base44.auth.me()
-        ]);
-        if (!active) return;
-        setExpenses(exp);
-        setMessages(msgs);
-        setCurrentUser(me);
-        if (trips[0]) {
-          setLiveTrip(trips[0]);
-          setResolution(trips[0].dispute_resolution || '');
-        }
-      } catch (e) { if (active) setMessage(e.message || 'Could not load trip details'); }
-    };
     load();
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    const offTrip = base44.entities.Trip.subscribe(() => load());
-    return () => { active = false; window.clearInterval(timer); offTrip?.(); };
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trip && trip.id]);
+
+  useSupabaseSubscription('trips', () => load());
 
   if (!trip) return null;
 
@@ -69,25 +74,25 @@ export default function TripDetailModal({ trip, deals, bids, onClose, onChanged 
   };
 
   const pauseHours = () => run(async () => {
-    await base44.entities.Trip.update(trip.id, { status: 'paused', tracked_minutes: accumulated(trip), timer_started_at: null });
+    await entities.Trip.update(trip.id, { status: 'paused', tracked_minutes: accumulated(trip), timer_started_at: null });
   }, 'Trip paused (broker view).');
 
   const finishTrip = () => run(async () => {
     const completedAt = new Date().toISOString();
-    await base44.entities.Trip.update(trip.id, { status: 'completed', tracked_minutes: accumulated(trip), timer_started_at: null, completed_at: completedAt });
-    await base44.entities.Deal.update(trip.deal_id, { status: 'completed', completed_at: completedAt });
+    await entities.Trip.update(trip.id, { status: 'completed', tracked_minutes: accumulated(trip), timer_started_at: null, completed_at: completedAt });
+    await entities.Deal.update(trip.deal_id, { status: 'completed', completed_at: completedAt });
   }, 'Trip completed (broker view).');
 
   const cancelTrip = () => run(async () => {
     if (trip.funding_status === 'confirmed') await refundTripFunding(trip);
     const accepted = bids.find(x => x.deal_id === trip.deal_id && x.driver_id === trip.driver_id && x.status === 'accepted');
-    if (accepted) await base44.entities.Bid.update(accepted.id, { status: 'rejected' });
-    await base44.entities.Trip.update(trip.id, { status: 'cancelled', cancelled_by: 'admin', timer_started_at: null });
-    await base44.entities.Deal.update(trip.deal_id, { status: 'cancelled', cancelled_by: 'admin' });
+    if (accepted) await entities.Bid.update(accepted.id, { status: 'rejected' });
+    await entities.Trip.update(trip.id, { status: 'cancelled', cancelled_by: 'admin', timer_started_at: null });
+    await entities.Deal.update(trip.deal_id, { status: 'cancelled', cancelled_by: 'admin' });
   }, 'Trip cancelled by admin. Any reserved funding was refunded to the broker.');
 
   const saveTip = () => run(async () => {
-    await base44.entities.Trip.update(trip.id, { tip_amount: Math.max(0, Number(tipInput) || 0) });
+    await entities.Trip.update(trip.id, { tip_amount: Math.max(0, Number(tipInput) || 0) });
   }, 'Tip updated.');
 
   const sendPayment = () => run(async () => {
@@ -105,7 +110,7 @@ export default function TripDetailModal({ trip, deals, bids, onClose, onChanged 
   const setExpenseStatus = (id, status) => {
     setExpenses(prev => prev.map(x => x.id === id ? { ...x, status } : x));
     run(async () => {
-      await base44.entities.TripExpense.update(id, { status });
+      await entities.TripExpense.update(id, { status });
     }, `Expense ${status}.`);
   };
 

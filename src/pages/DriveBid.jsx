@@ -1,5 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getCurrentUser, logout } from '@/lib/supabaseAuth';
+import { entities } from '@/api/supabaseEntities';
+import { uploadPrivateFile } from '@/lib/supabaseStorage';
+import { useSupabaseSubscription } from '@/hooks/useSupabaseSubscription';
 import { useNavigate } from 'react-router-dom';
 import '@/drivebid.css';
 import { isDriveBidOwner } from '@/lib/ownerAccess';
@@ -52,10 +55,10 @@ export default function DriveBid(){
   const load=async(showLoader=false)=>{
     if(showLoader)setLoading(true);
     try{
-      const realMe=await base44.auth.me();
+      const realMe=await getCurrentUser();
       let actingUser=realMe;
       if(actAsId&&isDriveBidOwner(realMe)){
-        const users=await base44.entities.User.filter({id:actAsId},'-created_date',1);
+        const users=await entities.User.filter({id:actAsId},'-created_date',1);
         actingUser=users[0]||realMe;
         setImpersonating(true);
       }else{
@@ -65,14 +68,14 @@ export default function DriveBid(){
       setUser(actingUser);
       setRole(actingUser.account_type==='driver'?'driver':'broker');
       const [allDeals,allBids,userTrips,driverList,favoriteList,routeList]=await Promise.all([
-        base44.entities.Deal.list('-created_date',100),
-        base44.entities.Bid.list('-created_date',500),
+        entities.Deal.list('-created_date',100),
+        entities.Bid.list('-created_date',500),
         actingUser.account_type==='driver'
-          ? base44.entities.Trip.filter({driver_id:actingUser.id},'-created_date',250)
-          : base44.entities.Trip.filter({broker_id:actingUser.id},'-created_date',250),
-        base44.entities.Driver.list('-created_date',500),
-        actingUser.account_type!=='driver'?base44.entities.FavoriteDriver.filter({broker_id:actingUser.id},'-created_date',200):Promise.resolve([]),
-        actingUser.account_type!=='driver'?base44.entities.SavedRoute.filter({broker_id:actingUser.id},'-created_date',100):Promise.resolve([])
+          ? entities.Trip.filter({driver_id:actingUser.id},'-created_date',250)
+          : entities.Trip.filter({broker_id:actingUser.id},'-created_date',250),
+        entities.Driver.list('-created_date',500),
+        actingUser.account_type!=='driver'?entities.FavoriteDriver.filter({broker_id:actingUser.id},'-created_date',200):Promise.resolve([]),
+        actingUser.account_type!=='driver'?entities.SavedRoute.filter({broker_id:actingUser.id},'-created_date',100):Promise.resolve([])
       ]);
       setDeals(allDeals);
       setBids(allBids);
@@ -81,33 +84,35 @@ export default function DriveBid(){
       setFavorites(favoriteList);
       setSavedRoutes(routeList);
       if(actingUser.account_type==='driver'){
-        const favoritedBy=await base44.entities.FavoriteDriver.filter({driver_id:actingUser.id},'-created_date',200);
+        const favoritedBy=await entities.FavoriteDriver.filter({driver_id:actingUser.id},'-created_date',200);
         setFavoritedByBrokerIds(favoritedBy.map(f=>f.broker_id));
       }
-      const profiles=await base44.entities.Driver.filter({created_by_id:actingUser.id},'-created_date',1);
+      const profiles=await entities.Driver.filter({created_by_id:actingUser.id},'-created_date',1);
       setDriver(profiles[0]||null);
     }catch(error){console.error(error);notify('Unable to load marketplace data');}
     finally{setLoading(false);}
   };
 
-  useEffect(()=>{
-    load(true);
-    let debounceTimer=null;
-    const debouncedLoad=()=>{if(debounceTimer)window.clearTimeout(debounceTimer);debounceTimer=window.setTimeout(()=>load(),300);};
-    const offDeals=base44.entities.Deal.subscribe((event)=>{
-      debouncedLoad();
-      if(event.type==='create')notify('A new delivery job was posted');
-      if(event.type==='update'&&event.data?.status==='cancelled'&&event.data?.cancelled_by==='driver'){
-        notify('A driver cancelled an accepted job. You can repost it from the cancelled list.');
-        if(typeof Notification!=='undefined'&&Notification.permission==='granted'){
-          try{new Notification('Relay · Driver cancellation',{body:'An accepted job was cancelled by the driver. Open Relay to repost it.'});}catch(error){}
-        }
-      }
-    });
-    const offBids=base44.entities.Bid.subscribe(debouncedLoad);
-    const offTrips=base44.entities.Trip.subscribe(debouncedLoad);
-    return()=>{offDeals?.();offBids?.();offTrips?.();if(debounceTimer)window.clearTimeout(debounceTimer);};
+  useEffect(()=>{load(true);},[]);
+
+  const debounceTimerRef=useRef(null);
+  const debouncedLoad=useCallback(()=>{
+    if(debounceTimerRef.current)window.clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current=window.setTimeout(()=>load(),300);
   },[]);
+
+  useSupabaseSubscription('deals',(payload)=>{
+    debouncedLoad();
+    if(payload.eventType==='INSERT')notify('A new delivery job was posted');
+    if(payload.eventType==='UPDATE'&&payload.new?.status==='cancelled'&&payload.new?.cancelled_by==='driver'){
+      notify('A driver cancelled an accepted job. You can repost it from the cancelled list.');
+      if(typeof Notification!=='undefined'&&Notification.permission==='granted'){
+        try{new Notification('Relay · Driver cancellation',{body:'An accepted job was cancelled by the driver. Open Relay to repost it.'});}catch(error){}
+      }
+    }
+  });
+  useSupabaseSubscription('bids',()=>debouncedLoad());
+  useSupabaseSubscription('trips',()=>debouncedLoad());
 
   const hasPriorityAccess=(deal)=>!deal.priority_until||new Date(deal.priority_until)<=new Date()||favoritedByBrokerIds.includes(deal.broker_id);
   const openDeals=deals.filter(d=>d.status==='open'&&(!d.preferred_only||d.preferred_driver_id===user?.id)&&hasPriorityAccess(d));
@@ -139,7 +144,7 @@ export default function DriveBid(){
 
   const openPost=async()=>{
     try{
-      const profiles=await base44.entities.Broker.filter({created_by_id:user.id},'-created_date',1);
+      const profiles=await entities.Broker.filter({created_by_id:user.id},'-created_date',1);
       const broker=profiles[0];
       if(broker?.status==='approved'){setJobModal(true);return;}
       const hasDocs=broker&&(broker.w9_document||broker.broker_license_document||broker.government_id_document);
@@ -153,7 +158,7 @@ export default function DriveBid(){
     const label=window.prompt('Name this route (e.g. "Downtown dealership → Airport")',`${job.pickup_location} → ${job.delivery_location}`);
     if(label===null)return;
     try{
-      const created=await base44.entities.SavedRoute.create({broker_id:user.id,label:label||`${job.pickup_location} → ${job.delivery_location}`,pickup_location:job.pickup_location,delivery_location:job.delivery_location});
+      const created=await entities.SavedRoute.create({broker_id:user.id,label:label||`${job.pickup_location} → ${job.delivery_location}`,pickup_location:job.pickup_location,delivery_location:job.delivery_location});
       setSavedRoutes([created,...savedRoutes]);
       notify('Route saved');
     }catch(error){notify(error.message||'Could not save route');}
@@ -161,7 +166,7 @@ export default function DriveBid(){
 
   const deleteRoute=async(routeId)=>{
     setSavedRoutes(savedRoutes.filter(r=>r.id!==routeId));
-    try{await base44.entities.SavedRoute.delete(routeId);}
+    try{await entities.SavedRoute.delete(routeId);}
     catch(error){notify(error.message||'Could not remove route');await load();}
   };
 
@@ -170,10 +175,10 @@ export default function DriveBid(){
     try{
       if(existing){
         setFavorites(favorites.filter(f=>f.id!==existing.id));
-        await base44.entities.FavoriteDriver.delete(existing.id);
+        await entities.FavoriteDriver.delete(existing.id);
         notify(`Removed ${driverName||'driver'} from favorites`);
       }else{
-        const created=await base44.entities.FavoriteDriver.create({broker_id:user.id,driver_id:driverId,driver_name:driverName||''});
+        const created=await entities.FavoriteDriver.create({broker_id:user.id,driver_id:driverId,driver_name:driverName||''});
         setFavorites([created,...favorites]);
         notify(`Added ${driverName||'driver'} to favorites`);
       }
@@ -190,11 +195,17 @@ export default function DriveBid(){
   const postJob=async(e)=>{
     e.preventDefault();setSaving(true);
     const hasPriorityWindow=!job.preferred_only&&favorites.length>0;
-    const optimistic={...job,estimated_hours:Number(job.estimated_hours),minimum_rate:Number(job.minimum_rate),target_rate:Number(job.minimum_rate),is_lease_return:job.return_plan==='Lease return provided',uber_driver_back:job.return_plan==='Broker will Uber driver back',broker_id:user.id,broker_name:user.full_name||user.email,status:'open',priority_until:hasPriorityWindow?new Date(Date.now()+PRIORITY_WINDOW_MINUTES*60000).toISOString():null,id:`temp-${Date.now()}`,created_date:new Date().toISOString()};
+    // preferred_driver_id is a nullable uuid column — an empty string (the
+    // unset-select default) would fail the insert, so normalize it to null.
+    const payload={...job,preferred_driver_id:job.preferred_driver_id||null,estimated_hours:Number(job.estimated_hours),minimum_rate:Number(job.minimum_rate),target_rate:Number(job.minimum_rate),is_lease_return:job.return_plan==='Lease return provided',uber_driver_back:job.return_plan==='Broker will Uber driver back',broker_id:user.id,broker_name:user.full_name||user.email,status:'open',priority_until:hasPriorityWindow?new Date(Date.now()+PRIORITY_WINDOW_MINUTES*60000).toISOString():null};
+    const optimistic={...payload,id:`temp-${Date.now()}`,created_date:new Date().toISOString()};
     setDeals([optimistic,...deals]);
     setJob(EMPTY_JOB);setJobModal(false);notify(hasPriorityWindow?`Job posted — your ${favorites.length} favorite driver${favorites.length===1?'':'s'} get first access for ${PRIORITY_WINDOW_MINUTES} minutes`:'Job posted — drivers can now bid');
     try{
-      await base44.entities.Deal.create(optimistic);
+      // create from the clean payload, not the optimistic UI record — that
+      // one carries a fake "temp-..." id/created_date for local rendering
+      // only, which would fail a real insert.
+      await entities.Deal.create(payload);
       await load();
     }catch(error){notify(error.message||'Could not post job');await load();}
     finally{setSaving(false);}
@@ -229,7 +240,7 @@ export default function DriveBid(){
       const optimistic={...payload,id:tempId,created_date:new Date().toISOString()};
       setBids(existing?bids.map(b=>b.id===existing.id?{...b,...optimistic}:b):[optimistic,...bids]);
       setBidModal(false);notify(existing?'Bid updated':'Bid submitted to broker');
-      if(existing)await base44.entities.Bid.update(existing.id,payload); else await base44.entities.Bid.create(payload);
+      if(existing)await entities.Bid.update(existing.id,payload); else await entities.Bid.create(payload);
       await load();
     }catch(error){notify(error.message||'Could not place bid');await load();}
     finally{setSaving(false);}
@@ -238,18 +249,18 @@ export default function DriveBid(){
   const decideBid=async(bid,status)=>{
     setSaving(true);
     try{
-      await base44.entities.Bid.update(bid.id,{status});
+      await entities.Bid.update(bid.id,{status});
       if(status==='accepted'){
-        await base44.entities.Deal.update(selected.id,{status:'assigned',assigned_driver_id:bid.driver_id,accepted_bid_id:bid.id});
-        const existingTrips=await base44.entities.Trip.filter({bid_id:bid.id},'-created_date',1);
-        if(!existingTrips[0])await base44.entities.Trip.create({
+        await entities.Deal.update(selected.id,{status:'assigned',assigned_driver_id:bid.driver_id,accepted_bid_id:bid.id});
+        const existingTrips=await entities.Trip.filter({bid_id:bid.id},'-created_date',1);
+        if(!existingTrips[0])await entities.Trip.create({
           deal_id:selected.id,bid_id:bid.id,broker_id:user.id,broker_name:user.full_name||user.email,
           driver_id:bid.driver_id,driver_name:bid.driver_name,vehicle_info:selected.vehicle_info,
           pickup_location:selected.pickup_location,delivery_location:selected.delivery_location,pickup_date:selected.pickup_date,pickup_time:selected.pickup_time,
           accepted_rate:Number(bid.hourly_rate),estimated_hours:Number(selected.estimated_hours||0),return_plan:selected.return_plan,job_notes:selected.notes||'',payment_method:selected.payment_method||'Relay wallet',funding_status:'pending',status:'scheduled',tracked_minutes:0,cancellation_fee_status:'not_applicable'
         });
         const others=bids.filter(x=>x.deal_id===selected.id&&x.id!==bid.id&&x.status==='pending');
-        await Promise.all(others.map(x=>base44.entities.Bid.update(x.id,{status:'rejected'})));
+        await Promise.all(others.map(x=>entities.Bid.update(x.id,{status:'rejected'})));
       }
       notify(status==='accepted'?'Driver selected':'Bid declined');await load();
       if(status==='accepted')setBidsModal(false);
@@ -257,7 +268,7 @@ export default function DriveBid(){
     finally{setSaving(false);}
   };
 
-  const buildRepostCopy=(deal,brokerId,brokerName)=>({broker_id:brokerId,broker_name:brokerName,vehicle_info:deal.vehicle_info,pickup_location:deal.pickup_location,delivery_location:deal.delivery_location,pickup_date:deal.pickup_date,pickup_time:deal.pickup_time,return_plan:deal.return_plan,estimated_hours:Number(deal.estimated_hours||2),minimum_rate:Number(deal.minimum_rate||deal.target_rate||20),target_rate:Number(deal.minimum_rate||deal.target_rate||20),is_lease_return:Boolean(deal.is_lease_return),uber_driver_back:Boolean(deal.uber_driver_back),notes:deal.notes||'',status:'open',preferred_driver_id:'',preferred_driver_name:'',preferred_only:false,reposted_from_deal_id:deal.id});
+  const buildRepostCopy=(deal,brokerId,brokerName)=>({broker_id:brokerId,broker_name:brokerName,vehicle_info:deal.vehicle_info,pickup_location:deal.pickup_location,delivery_location:deal.delivery_location,pickup_date:deal.pickup_date,pickup_time:deal.pickup_time,return_plan:deal.return_plan,estimated_hours:Number(deal.estimated_hours||2),minimum_rate:Number(deal.minimum_rate||deal.target_rate||20),target_rate:Number(deal.minimum_rate||deal.target_rate||20),is_lease_return:Boolean(deal.is_lease_return),uber_driver_back:Boolean(deal.uber_driver_back),notes:deal.notes||'',status:'open',preferred_driver_id:null,preferred_driver_name:'',preferred_only:false,reposted_from_deal_id:deal.id});
 
   const cancelAcceptedBid=async(b)=>{
     if(b.trip&&!['scheduled','paused'].includes(b.trip.status)){notify('This job can no longer be cancelled from here.');return;}
@@ -265,20 +276,20 @@ export default function DriveBid(){
     try{
       const cancelledAt=new Date().toISOString();
       const deal=b.deal||deals.find(d=>d.id===b.deal_id);
-      await base44.entities.Bid.update(b.id,{status:'withdrawn'});
-      await base44.entities.Deal.update(b.deal_id,{status:'cancelled',cancelled_by:'driver',cancelled_at:cancelledAt});
-      const trips=await base44.entities.Trip.filter({bid_id:b.id},'-created_date',1);
+      await entities.Bid.update(b.id,{status:'withdrawn'});
+      await entities.Deal.update(b.deal_id,{status:'cancelled',cancelled_by:'driver',cancelled_at:cancelledAt});
+      const trips=await entities.Trip.filter({bid_id:b.id},'-created_date',1);
       let feeAmount=0;
       if(trips[0]){
         await refundTripFunding(trips[0]);
-        await base44.entities.Trip.update(trips[0].id,{status:'cancelled',cancelled_by:'driver',cancelled_at:cancelledAt,cancellation_fee_status:'policy_pending'});
+        await entities.Trip.update(trips[0].id,{status:'cancelled',cancelled_by:'driver',cancelled_at:cancelledAt,cancellation_fee_status:'policy_pending'});
         const feeResult=await chargeCancellationFee(trips[0]);
         feeAmount=Number(feeResult?.amount||0);
       }
-      if(driver)await base44.entities.Driver.update(driver.id,{cancelled_trips:(driver.cancelled_trips||0)+1});
+      if(driver)await entities.Driver.update(driver.id,{cancelled_trips:(driver.cancelled_trips||0)+1});
       if(deal){
-        const created=await base44.entities.Deal.create(buildRepostCopy(deal,deal.broker_id,deal.broker_name));
-        await base44.entities.Deal.update(deal.id,{reposted_at:cancelledAt,reposted_as_deal_id:created.id});
+        const created=await entities.Deal.create(buildRepostCopy(deal,deal.broker_id,deal.broker_name));
+        await entities.Deal.update(deal.id,{reposted_at:cancelledAt,reposted_as_deal_id:created.id});
       }
       setCancelBidTarget(null);
       notify(feeAmount>0?`Job cancelled and reposted for the broker. A $${feeAmount.toFixed(2)} cancellation fee was charged to your wallet.`:'Job cancelled and reposted for the broker.');
@@ -291,11 +302,11 @@ export default function DriveBid(){
     setSaving(true);
     try{
       const accepted=bids.find(x=>x.deal_id===trip.deal_id&&x.driver_id===trip.driver_id&&x.status==='accepted');
-      if(accepted)await base44.entities.Bid.update(accepted.id,{status:'rejected'});
+      if(accepted)await entities.Bid.update(accepted.id,{status:'rejected'});
       const cancelledAt=new Date().toISOString();
-      await base44.entities.Deal.update(trip.deal_id,{status:'cancelled',cancelled_by:'broker',cancelled_at:cancelledAt});
+      await entities.Deal.update(trip.deal_id,{status:'cancelled',cancelled_by:'broker',cancelled_at:cancelledAt});
       await refundTripFunding(trip);
-      await base44.entities.Trip.update(trip.id,{status:'cancelled',cancelled_by:'broker',cancelled_at:cancelledAt,cancellation_fee_status:'not_applicable'});
+      await entities.Trip.update(trip.id,{status:'cancelled',cancelled_by:'broker',cancelled_at:cancelledAt,cancellation_fee_status:'not_applicable'});
       notify('Job cancelled. You can repost it from the cancelled list.');await load();
     }catch(error){notify(error.message||'Could not cancel');}
     finally{setSaving(false);}
@@ -304,8 +315,8 @@ export default function DriveBid(){
   const repostDeal=async(deal)=>{
     setSaving(true);
     try{
-      const created=await base44.entities.Deal.create(buildRepostCopy(deal,user.id,user.full_name||user.email));
-      await base44.entities.Deal.update(deal.id,{reposted_at:new Date().toISOString(),reposted_as_deal_id:created.id});
+      const created=await entities.Deal.create(buildRepostCopy(deal,user.id,user.full_name||user.email));
+      await entities.Deal.update(deal.id,{reposted_at:new Date().toISOString(),reposted_as_deal_id:created.id});
       notify('A fresh copy was posted to the load board. Previous bids were not carried over.');await load();
     }catch(error){notify(error.message||'Could not repost');}
     finally{setSaving(false);}
@@ -317,7 +328,7 @@ export default function DriveBid(){
     try{
       const uploadField=async(name,existing)=>{
         const file=form.get(name);
-        if(file&&file.size){const uploaded=await base44.integrations.Core.UploadPrivateFile({file});return uploaded.file_uri;}
+        if(file&&file.size){return await uploadPrivateFile('driver-documents',`${user.id}/${Date.now()}-${file.name}`,file);}
         return existing||'';
       };
       const [license_front,license_back,driving_history_report]=await Promise.all([
@@ -326,13 +337,14 @@ export default function DriveBid(){
         uploadField('driving_history_report',driver?.driving_history_report)
       ]);
       const payload={
+        created_by_id:user.id,
         full_name:user.full_name||form.get('full_name'),email:user.email,phone:form.get('phone'),
         license_state:form.get('license_state'),license_number:form.get('license_number'),
         license_expiration:form.get('license_expiration'),license_front,license_back,driving_history_report,
         driving_history_consent:true,operating_area:form.get('operating_area'),
         rating:driver?.rating||5,completed_deliveries:driver?.completed_deliveries||0,response_rate:driver?.response_rate||100
       };
-      const saved=driver?await base44.entities.Driver.update(driver.id,payload):await base44.entities.Driver.create(payload);
+      const saved=driver?await entities.Driver.update(driver.id,payload):await entities.Driver.create(payload);
       setDriver(saved);setView('jobs');notify('Application submitted for review');
     }catch(error){notify(error.message||'Could not submit application');}
     finally{setSaving(false);}
@@ -374,7 +386,7 @@ export default function DriveBid(){
       {role==='driver'&&<button onClick={()=>{setView('vetting');setMenu(false)}}>Driver application</button>}
       {role==='broker'&&<button onClick={()=>navigate('/broker-application')}>{user?.account_type==='individual'?'Identity verification':'Broker application'}</button>}
       {isDriveBidOwner(user)&&<button onClick={()=>navigate('/admin')}>Admin dashboard</button>}
-      <button onClick={()=>base44.auth.logout(window.location.origin+'/login')}>Sign out</button>
+      <button onClick={()=>logout(window.location.origin+'/login')}>Sign out</button>
     </div>}
 
     <main className="db-page">

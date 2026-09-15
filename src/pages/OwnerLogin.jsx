@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
+import { getCurrentUser, loginWithPassword, loginWithProvider, logout } from '@/lib/supabaseAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,7 +19,7 @@ export default function OwnerLogin() {
   useEffect(()=>{
     (async()=>{
       try{
-        const user=await base44.auth.me();
+        const user=await getCurrentUser();
         if(isDriveBidOwner(user)){
           window.location.replace('/admin');
           return;
@@ -39,7 +39,7 @@ export default function OwnerLogin() {
     setError('');
     setLoading(true);
     try{
-      const response=await base44.auth.loginViaEmailPassword(email,password);
+      const response=await loginWithPassword(email,password);
       if(!isDriveBidOwner(response.user)){
         setError('This login is not authorized for the owner dashboard.');
         return;
@@ -53,11 +53,11 @@ export default function OwnerLogin() {
   };
 
   const handleGoogle=()=>{
-    base44.auth.loginWithProvider('google',window.location.origin+'/owner-login?complete=1');
+    loginWithProvider('google',window.location.origin+'/owner-login?complete=1');
   };
 
   const signOut=()=>{
-    base44.auth.logout(window.location.origin+'/owner-login');
+    logout(window.location.origin+'/owner-login');
   };
 
   return <AuthLayout

@@ -1,10 +1,11 @@
-import { base44 } from '@/api/base44Client';
+import { supabase } from '@/api/supabaseClient';
 
 export async function submitTripReview(trip, rating, comment) {
-  try {
-    const response = await base44.functions.invoke('submit-review', { trip_id: trip.id, rating, comment });
-    return response?.data ?? response;
-  } catch (error) {
-    throw new Error(error?.response?.data?.error || error?.message || 'Could not submit review');
-  }
+  const { data, error } = await supabase.rpc('submit_review', {
+    p_trip_id: trip.id,
+    p_rating: rating,
+    p_comment: comment,
+  });
+  if (error) throw new Error(error.message || 'Could not submit review');
+  return data;
 }

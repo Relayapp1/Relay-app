@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import Logo from '@/components/Logo';
 import { getCurrentUser } from '@/lib/supabaseAuth';
 import { entities } from '@/api/supabaseEntities';
 import { uploadPrivateFile, createSignedUrl } from '@/lib/supabaseStorage';
@@ -426,15 +427,17 @@ export default function TripCenter(){
   };
 
   if(loading)return <div className="db-loading"><div><div className="db-spinner"/><span>Loading trips…</span></div></div>;
+  const isPoster=user?.account_type!=='driver';
   const chatMessages=chatTrip?messages.filter(m=>m.trip_id===chatTrip.id).slice().sort((a,b)=>new Date(a.created_date)-new Date(b.created_date)):[];
   return <div className="db-shell">
-    <header className="db-topbar"><div className="db-brand"><div className="db-brandmark">R</div><span>Relay</span></div><button className="db-button secondary db-admin-back" onClick={()=>navigate(-1)}>← Back</button></header>
+    <header className="db-topbar"><div className="db-brand"><div className="db-brandmark"><Logo/></div><span>Relay</span></div><button className="db-button secondary db-admin-back" onClick={()=>navigate(-1)}>← Back</button></header>
     <main className="db-page">
       <PullToRefresh onRefresh={load}>
-      <div className="db-heading-row"><div><div className="db-eyebrow">Assigned work</div><h1>My trips</h1><p>Track hours, expenses, trip progress, location, and payment status.</p></div><button className="db-button secondary" onClick={()=>navigate('/profile')}>My profile</button></div>
+      <div className="db-heading-row"><div><div className="db-eyebrow">{isPoster?'Posted work':'Assigned work'}</div><h1>My trips</h1><p>{isPoster?'Track your drivers’ progress, expenses, location, and payments.':'Track hours, expenses, trip progress, location, and payment status.'}</p></div><button className="db-button secondary" onClick={()=>navigate('/profile')}>My profile</button></div>
       {message&&<div className="db-notice">{message}</div>}
       {notifPrompt&&<div className="db-alert pending"><div className="db-alert-icon">!</div><div style={{flex:1}}><strong>Turn on notifications?</strong><p>Get alerted the moment a new message arrives, and get a reminder if you forget to stop hour tracking.</p></div><div className="db-inline-actions"><button className="db-button secondary" onClick={()=>setNotifPrompt(false)}>Not now</button><button className="db-button" onClick={enableNotifications}>Enable</button></div></div>}
-      <div className="db-trip-notice"><strong>Location privacy:</strong> sharing starts only after the driver checks the consent box and taps Share live location. It stops when paused, completed, or manually stopped. Keep the app open in the foreground for reliable updates.</div>
+      {!isPoster&&<div className="db-trip-notice"><strong>Location privacy:</strong> sharing starts only after the driver checks the consent box and taps Share live location. It stops when paused, completed, or manually stopped. Keep the app open in the foreground for reliable updates.</div>}
+      {isPoster&&<div className="db-trip-notice"><strong>Location privacy:</strong> a driver's live location only appears here once they've opted in and started sharing for that trip.</div>}
       <div className="db-trip-list" ref={containerRef}>
         {trips.length?trips.map(trip=>{
           const driverSide=trip.driver_id===user.id;
@@ -494,7 +497,7 @@ export default function TripCenter(){
             </div>}
             {trip.status==='completed'&&!reviewed&&<button className="db-link-btn db-review-button" onClick={()=>setReviewTrip(trip)}>Leave a review</button>}
           </article>;
-        }):<div className="db-panel db-empty"><strong>No assigned trips yet</strong>A private trip workspace appears automatically when a broker accepts a driver’s bid.</div>}
+        }):<div className="db-panel db-empty"><strong>No trips yet</strong>{isPoster?'A private trip workspace appears automatically once you accept a driver’s bid.':'A private trip workspace appears automatically when a broker accepts your bid.'}</div>}
       </div>
     </PullToRefresh></main>
     {alert&&<div className="db-toast" role="status">{alert}</div>}

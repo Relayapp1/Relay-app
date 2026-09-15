@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import Logo from '@/components/Logo';
 import { getCurrentUser, updateCurrentUser, logout } from '@/lib/supabaseAuth';
 import { entities } from '@/api/supabaseEntities';
 import { createSignedUrl } from '@/lib/supabaseStorage';
@@ -19,6 +20,7 @@ const statusLabel=(value)=>value?value[0].toUpperCase()+value.slice(1):'Not subm
 
 export default function AccountProfile(){
   const navigate=useNavigate();
+  const [tab,setTab]=useState('overview');
   const [user,setUser]=useState(null);
   const [profile,setProfile]=useState(null);
   const [trips,setTrips]=useState([]);
@@ -135,67 +137,85 @@ export default function AccountProfile(){
   ];
 
   if(loading)return <div className="db-loading"><div><div className="db-spinner"/><span>Loading profile…</span></div></div>;
+  const documentsPanel=<section className="db-panel"><div className="db-panel-head"><h2>Documents</h2>{!isAdmin&&<button className="db-link-btn" onClick={()=>navigate(isPoster?'/broker-application':'/?view=vetting')}>{profile?'Manage':'Complete vetting'}</button>}</div><div className="db-side-body">
+    {documents.some(([,uri])=>uri)?documents.map(([label,uri])=><div className="db-document-row" key={label}><div><strong>{label}</strong><small>{uri?'Uploaded securely':'Not uploaded'}</small></div>{uri&&<button className="db-link-btn" onClick={()=>openDocument(uri)}>View</button>}</div>):<div className="db-empty"><strong>No documents uploaded</strong>Complete your vetting application to add documents.</div>}
+  </div></section>;
   return <div className="db-shell">
-    <header className="db-topbar"><div className="db-brand"><div className="db-brandmark">R</div><span>Relay</span></div><button className="db-button secondary db-admin-back" onClick={()=>navigate(-1)}>← Back</button></header>
+    <header className="db-topbar"><div className="db-brand"><div className="db-brandmark"><Logo/></div><span>Relay</span></div></header>
     <main className="db-page">
       <PullToRefresh onRefresh={load}/>
-      <div className="db-heading-row"><div><div className="db-eyebrow">{isAdmin?'Admin':isIndividual?'Individual':isBroker?'Broker':'Driver'} account</div><h1>My profile</h1><p>Your contact information, documents, activity, and reviews.</p></div><div style={{display:'flex',gap:10,flexWrap:'wrap'}}><button className="db-button secondary" onClick={()=>navigate('/')}>Marketplace</button>{!isPoster&&<button className="db-button secondary" onClick={()=>navigate('/trips')}>My trips</button>}{isDriveBidOwner(user)&&<button className="db-button secondary" onClick={()=>navigate('/admin')}>Admin</button>}<button className="db-button danger" onClick={()=>logout(window.location.origin+'/login')}>Sign out</button></div></div>
+      <div className="db-heading-row"><div><div className="db-eyebrow">{isAdmin?'Admin':isIndividual?'Individual':isBroker?'Broker':'Driver'} account</div><h1>My profile</h1><p>Your contact information, documents, activity, and reviews.</p></div><div style={{display:'flex',gap:10,flexWrap:'wrap'}}>{!isPoster&&<button className="db-button secondary" onClick={()=>navigate('/trips')}>My trips</button>}{isDriveBidOwner(user)&&<button className="db-button secondary" onClick={()=>navigate('/admin')}>Admin</button>}</div></div>
       {!profile&&!isAdmin&&<div className="db-alert pending"><div className="db-alert-icon">!</div><div><strong>{isIndividual?'Identity verification required':isBroker?'Broker vetting required':'Driver vetting required'}</strong><p>Your account profile is active. Complete vetting to use live marketplace features.</p></div></div>}
-      <section className="db-panel db-verification-panel">
-        <div className="db-panel-head"><h2>Contact verification</h2><span className="db-count">Security</span></div>
-        <div className="db-verification-grid">
-          <div className="db-verification-item"><div className="db-verification-badge verified">✓</div><div><strong>Email address</strong><p>{user?.email||''}</p><small>Verified</small></div></div>
-          <div className="db-verification-item"><div className="db-verification-badge">#</div><div><strong>Phone number</strong><p>{formatPhone(form.phone)||'Add a phone number below'}</p><small>SMS code verification will be added in the next phase.</small></div><span className="db-admin-status pending">Coming later</span></div>
-        </div>
-      </section>
       {message&&<div className="db-notice" style={{marginTop:16,marginBottom:0}}>{message}</div>}
-      <div className="db-profile-layout" style={{marginTop:22}}>
+
+      <div className="db-admin-tabs" style={{marginTop:22}}>
+        <button className={tab==='overview'?'active':''} onClick={()=>setTab('overview')}>Overview</button>
+        <button className={tab==='security'?'active':''} onClick={()=>setTab('security')}>Security</button>
+        {!isAdmin&&<button className={tab==='wallet'?'active':''} onClick={()=>setTab('wallet')}>Wallet</button>}
+      </div>
+
+      {tab==='overview'&&<div className="db-profile-layout">
         <section className="db-panel">
           <div className="db-panel-head"><h2>Account information</h2><span className={`db-admin-status ${isAdmin?'approved':profile?.status||'pending'}`}>{isAdmin?'Admin':statusLabel(profile?.status)}</span></div>
           <form className="db-form" onSubmit={save}><div className="db-form-grid">
             <Field label={isAdmin?'Admin name':isBroker?'Broker name':'Full name'} full><input required value={form.full_name} onChange={e=>setForm({...form,full_name:e.target.value})}/></Field>
-            <Field label="Email address" full><input required type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></Field>
-            <Field label="Phone number" full><input required value={form.phone} onChange={e=>setForm({...form,phone:formatPhone(e.target.value)})}/></Field>
             {!isPoster&&!isAdmin&&<Field label="Public operating area" full><input required value={form.operating_area} onChange={e=>setForm({...form,operating_area:e.target.value})} placeholder="Example: NYC, Long Island, North Jersey"/></Field>}
             {profile?.company&&<Field label="Company" full><input value={profile.company} readOnly/></Field>}
-          </div><div className="db-notice" style={{marginBottom:12}}>This updates the contact details on your profile. Your sign-in email is locked for security.</div><div className="db-form-actions"><button className="db-button" disabled={saving}>{saving?'Saving…':'Save information'}</button></div></form>
+          </div><div className="db-form-actions"><button className="db-button" disabled={saving}>{saving?'Saving…':'Save information'}</button></div></form>
         </section>
         <aside className="db-panel">
           <div className="db-panel-head"><h2>Performance</h2></div>
           <div className="db-profile-stats">{stats.map(([label,value])=><div className="db-stat" key={label}><strong>{value}</strong><span>{label}</span></div>)}</div>
           {!isPoster&&!isAdmin&&(()=>{const badges=computeDriverBadges(profile);return badges.length?<div className="db-chips" style={{padding:'0 20px 20px'}}>{badges.map(b=><span key={b.key} className="db-chip" title={b.label}>{b.emoji} {b.label}</span>)}</div>:null;})()}
         </aside>
-      </div>
-      {!isAdmin&&<section className="db-panel" style={{marginTop:22}}>
-        <div className="db-panel-head"><h2>Payment history</h2><span className="db-count">{completed.length} completed {completed.length===1?'job':'jobs'}</span></div>
-        <div className="db-side-body">
-          <p className="db-job-meta" style={{margin:'0 0 14px'}}>{isPoster?'Download a statement of what you’ve paid, trip by trip — useful for your own records.':'Download a year-by-year summary of your completed jobs and payouts — useful for your own tax prep.'}</p>
-          <button className="db-button" disabled={!completed.length} onClick={exportStatement}>{completed.length?`Download ${isPoster?'statement':'earnings summary'} (CSV)`:'No completed jobs yet'}</button>
-        </div>
-      </section>}
-      <section className="db-panel" style={{marginTop:22}}>
-        <div className="db-panel-head"><h2>Change password</h2><span className="db-count">Security</span></div>
-        <div className="db-side-body">
-          <p className="db-job-meta" style={{margin:'0 0 14px'}}>Update the password you use to sign in.</p>
-          <button className="db-button" onClick={()=>navigate('/change-password')}>Change password →</button>
-        </div>
-      </section>
-      <section className="db-panel" style={{marginTop:22,borderColor:'#f1cfd4'}}>
-        <div className="db-panel-head"><h2>Delete account</h2><span className="db-count">Danger zone</span></div>
-        <div className="db-side-body">
-          <p className="db-job-meta" style={{margin:'0 0 14px'}}>Permanently delete your account and all associated data. This cannot be undone.</p>
-          <button className="db-button danger" onClick={()=>setDeleteModal(true)}>Delete account</button>
-        </div>
-      </section>
-      {!isAdmin&&<WalletPanel user={user}/>}
-      <div className="db-profile-layout" style={{marginTop:22}}>
-        <section className="db-panel"><div className="db-panel-head"><h2>Documents</h2>{!isAdmin&&<button className="db-link-btn" onClick={()=>navigate(isPoster?'/broker-application':'/?view=vetting')}>{profile?'Manage':'Complete vetting'}</button>}</div><div className="db-side-body">
-          {documents.some(([,uri])=>uri)?documents.map(([label,uri])=><div className="db-document-row" key={label}><div><strong>{label}</strong><small>{uri?'Uploaded securely':'Not uploaded'}</small></div>{uri&&<button className="db-link-btn" onClick={()=>openDocument(uri)}>View</button>}</div>):<div className="db-empty"><strong>No documents uploaded</strong>Complete your vetting application to add documents.</div>}
-        </div></section>
-        <section className="db-panel"><div className="db-panel-head"><h2>Reviews</h2><span className="db-count">{reviews.length}</span></div><div className="db-side-body">
-          {reviews.length?reviews.map(review=><article className="db-review" key={review.id}><strong>{'★'.repeat(Math.max(1,Math.min(5,Math.round(review.rating))))}</strong><p>{review.comment||'No written comment.'}</p><small>From {review.reviewer_name||review.reviewer_role}</small></article>):<div className="db-empty"><strong>No reviews yet</strong>Reviews appear after completed deliveries.</div>}
-        </div></section>
-      </div>
+      </div>}
+      {tab==='overview'&&<section className="db-panel" style={{marginTop:22}}><div className="db-panel-head"><h2>Reviews</h2><span className="db-count">{reviews.length}</span></div><div className="db-side-body">
+        {reviews.length?reviews.map(review=><article className="db-review" key={review.id}><strong>{'★'.repeat(Math.max(1,Math.min(5,Math.round(review.rating))))}</strong><p>{review.comment||'No written comment.'}</p><small>From {review.reviewer_name||review.reviewer_role}</small></article>):<div className="db-empty"><strong>No reviews yet</strong>Reviews appear after completed deliveries.</div>}
+      </div></section>}
+      {tab==='overview'&&<div className="db-side-body" style={{textAlign:'center',marginTop:8}}><button className="db-button danger" onClick={()=>logout(window.location.origin+'/login')}>Sign out</button></div>}
+
+      {tab==='security'&&<div style={{display:'grid',gap:22}}>
+        <section className="db-panel db-verification-panel">
+          <div className="db-panel-head"><h2>Contact verification</h2></div>
+          <div className="db-verification-grid">
+            <div className="db-verification-item"><div className="db-verification-badge verified">✓</div><div><strong>Email address</strong><p>{user?.email||''}</p><small>Verified</small></div></div>
+            <div className="db-verification-item"><div className="db-verification-badge">#</div><div><strong>Phone number</strong><p>{formatPhone(form.phone)||'Add a phone number below'}</p><small>SMS code verification will be added in the next phase.</small></div><span className="db-admin-status pending">Coming later</span></div>
+          </div>
+        </section>
+        {documentsPanel}
+        <section className="db-panel">
+          <div className="db-panel-head"><h2>Email and phone</h2></div>
+          <form className="db-form" onSubmit={save}><div className="db-form-grid">
+            <Field label="Email address" full><input required type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></Field>
+            <Field label="Phone number" full><input required value={form.phone} onChange={e=>setForm({...form,phone:formatPhone(e.target.value)})}/></Field>
+          </div><div className="db-notice" style={{marginBottom:12}}>This updates the contact details on your profile. Your sign-in email is locked for security.</div><div className="db-form-actions"><button className="db-button" disabled={saving}>{saving?'Saving…':'Save changes'}</button></div></form>
+        </section>
+        <section className="db-panel">
+          <div className="db-panel-head"><h2>Password</h2></div>
+          <div className="db-side-body">
+            <p className="db-job-meta" style={{margin:'0 0 14px'}}>Update the password you use to sign in.</p>
+            <button className="db-button" onClick={()=>navigate('/change-password')}>Change password →</button>
+          </div>
+        </section>
+        <section className="db-panel" style={{borderColor:'#f1cfd4'}}>
+          <div className="db-panel-head"><h2>Delete account</h2><span className="db-count">Danger zone</span></div>
+          <div className="db-side-body">
+            <p className="db-job-meta" style={{margin:'0 0 14px'}}>Permanently delete your account and all associated data. This cannot be undone.</p>
+            <button className="db-button danger" onClick={()=>setDeleteModal(true)}>Delete account</button>
+          </div>
+        </section>
+      </div>}
+
+      {tab==='wallet'&&!isAdmin&&<div style={{display:'grid',gap:22}}>
+        <WalletPanel user={user}/>
+        <section className="db-panel">
+          <div className="db-panel-head"><h2>Payment history</h2><span className="db-count">{completed.length} completed {completed.length===1?'job':'jobs'}</span></div>
+          <div className="db-side-body">
+            <p className="db-job-meta" style={{margin:'0 0 14px'}}>{isPoster?'Download a statement of what you’ve paid, trip by trip — useful for your own records.':'Download a year-by-year summary of your completed jobs and payouts — useful for your own tax prep.'}</p>
+            <button className="db-button" disabled={!completed.length} onClick={exportStatement}>{completed.length?`Download ${isPoster?'statement':'earnings summary'} (CSV)`:'No completed jobs yet'}</button>
+          </div>
+        </section>
+      </div>}
     </main>
       {deleteModal&&<Modal title="Delete account?" onClose={()=>setDeleteModal(false)}><div className="db-form"><div className="db-alert pending"><div className="db-alert-icon">!</div><div><strong>This action is permanent</strong><p>All your data will be permanently deleted: profile, trips, bids, wallet, documents, messages, and reviews. This cannot be undone.</p></div></div><div className="db-form-actions"><button type="button" className="db-button secondary" onClick={()=>setDeleteModal(false)} disabled={deleting}>Cancel</button><button className="db-button danger" disabled={deleting} onClick={deleteAccount}>{deleting?'Deleting…':'Yes, delete my account'}</button></div></div></Modal>}
   </div>;

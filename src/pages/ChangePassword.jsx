@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Logo from '@/components/Logo';
 import { changePassword } from '@/lib/supabaseAuth';
 import { useNavigate } from 'react-router-dom';
 import '@/drivebid.css';
@@ -30,7 +31,7 @@ export default function ChangePassword() {
   return (
     <div className="db-shell">
       <header className="db-topbar">
-        <div className="db-brand"><div className="db-brandmark">R</div><span>Relay</span></div>
+        <div className="db-brand"><div className="db-brandmark"><Logo/></div><span>Relay</span></div>
         <button className="db-button secondary db-admin-back" onClick={() => navigate('/profile')}>← Back to profile</button>
       </header>
       <main className="db-page">

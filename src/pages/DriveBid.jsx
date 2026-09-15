@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Logo from '@/components/Logo';
 import { getCurrentUser, logout } from '@/lib/supabaseAuth';
 import { entities } from '@/api/supabaseEntities';
 import { uploadPrivateFile } from '@/lib/supabaseStorage';
@@ -373,7 +374,7 @@ export default function DriveBid(){
 
   return <div className="db-shell">
     <header className="db-topbar">
-      <div className="db-brand"><div className="db-brandmark">R</div><span>Relay</span></div>
+      <div className="db-brand"><div className="db-brandmark"><Logo/></div><span>Relay</span></div>
       <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:14}}>
         {impersonating&&<button className="db-button secondary" onClick={()=>navigate('/admin')}>Exit to admin</button>}
         {isDriveBidOwner(user)&&<button className="db-admin-toplink" onClick={()=>navigate('/admin')}>Admin</button>}

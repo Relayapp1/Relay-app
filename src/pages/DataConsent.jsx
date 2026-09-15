@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import Logo from '@/components/Logo';
 import { getCurrentUser, updateCurrentUser } from '@/lib/supabaseAuth';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import '@/drivebid.css';
@@ -40,7 +41,7 @@ export default function DataConsent() {
   return (
     <div className="db-shell">
       <header className="db-topbar">
-        <div className="db-brand"><div className="db-brandmark">R</div><span>Relay</span></div>
+        <div className="db-brand"><div className="db-brandmark"><Logo/></div><span>Relay</span></div>
       </header>
       <main className="db-page" style={{ maxWidth: 760 }}>
         <div className="db-heading-row"><div><div className="db-eyebrow">Required before you continue</div><h1>Background Check &amp; Data Authorization</h1><p>This disclosure stands on its own — it isn't part of the Terms of Service or Privacy Policy. Please read it in full before deciding.</p></div></div>

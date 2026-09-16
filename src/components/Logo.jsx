@@ -2,11 +2,12 @@ import React from "react";
 
 export default function Logo({ size = 20 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#7B93F0" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M8 19V5" />
-      <path d="M8 5H13.5C15.7 5 17 6.5 17 8.5C17 10.5 15.7 12 13.5 12H8" />
-      <path d="M12 12L18.5 19" />
-      <path d="M15.3 19H18.5V15.8" />
+    <svg width={size} height={size} viewBox="0 0 24 24">
+      <text x="3.5" y="18.5" fontFamily="Poppins, sans-serif" fontWeight="800" fontSize="17" fill="#ffffff">R</text>
+      <g transform="translate(15,11)">
+        <path d="M3 0C1.3 0 0 1.3 0 3c0 2.2 3 5.5 3 5.5s3-3.3 3-5.5c0-1.7-1.3-3-3-3z" fill="#e0342a" />
+        <circle cx="3" cy="3" r="1.1" fill="#0d0d0f" />
+      </g>
     </svg>
   );
 }

@@ -1,15 +1,14 @@
 import React from "react";
 import "@/drivebid.css";
-import Logo from "@/components/Logo";
+import RelayWordmark from "@/components/RelayWordmark";
 
 export default function AuthLayout({ title, subtitle, footer, children }) {
   return (
     <div className="db-shell auth-light min-h-screen flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="db-brand justify-center mb-5">
-            <div className="db-brandmark"><Logo /></div>
-            <span className="text-[#161922]">Relay</span>
+          <div className="flex justify-center mb-5">
+            <RelayWordmark width={200} />
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight text-[#161922]">{title}</h1>
           {subtitle && <p className="text-[#6b7280] mt-2">{subtitle}</p>}

@@ -1,13 +1,6 @@
 import React from "react";
+import icon from "@/assets/relay-icon.png";
 
 export default function Logo({ size = 20 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24">
-      <text x="3.5" y="18.5" fontFamily="Poppins, sans-serif" fontWeight="800" fontSize="17" fill="#ffffff">R</text>
-      <g transform="translate(15,11)">
-        <path d="M3 0C1.3 0 0 1.3 0 3c0 2.2 3 5.5 3 5.5s3-3.3 3-5.5c0-1.7-1.3-3-3-3z" fill="#e0342a" />
-        <circle cx="3" cy="3" r="1.1" fill="#0d0d0f" />
-      </g>
-    </svg>
-  );
+  return <img src={icon} alt="" width={size} height={size} style={{ display: "block", width: size, height: size }} />;
 }

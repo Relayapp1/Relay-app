@@ -5,8 +5,12 @@ import { useIsMobile } from '@/hooks/use-mobile';
 
 const SCROLL_KEY = 'relay_tab_scroll';
 const STACK_KEY = 'relay_tab_stacks';
-const TAB_ROOTS = ['/', '/trips', '/profile'];
+const TAB_ROOTS = ['/', '/admin', '/trips', '/profile'];
 
+// '/admin' groups under the Marketplace tab's identity — it's the owner's
+// equivalent of the marketplace home — but callers that need the literal
+// current path (to avoid bouncing through '/' and racing DriveBid's
+// owner redirect back to '/admin') should use location.pathname directly.
 const tabForPath = (path) => {
   if (path.startsWith('/trips')) return '/trips';
   if (path.startsWith('/profile')) return '/profile';
@@ -57,10 +61,21 @@ export default function MobileTabBar() {
   const handleTabClick = (path) => {
     scrollRef.current[location.pathname] = window.scrollY;
     if (path === activeTab.current) {
-      stacks.current[path] = [path];
+      // Re-tapping the active tab resets its stack and scrolls to top. For
+      // an owner on /admin (which shares the Marketplace tab's identity),
+      // resetting to the literal '/' would bounce through DriveBid's
+      // client-side owner redirect back to /admin — wasteful, and prone to
+      // racing a fast follow-up tap on another tab. Reset to wherever this
+      // tab's root actually is instead.
+      const resetTo = location.pathname === '/admin' ? '/admin' : path;
+      stacks.current[path] = [resetTo];
       persist();
-      switching.current = true;
-      navigate(path, { replace: true });
+      if (location.pathname !== resetTo) {
+        switching.current = true;
+        navigate(resetTo, { replace: true });
+      } else {
+        window.scrollTo(0, 0);
+      }
       return;
     }
     const outTab = activeTab.current;

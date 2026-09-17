@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import Logo from '@/components/Logo';
+import RelayWordmark from '@/components/RelayWordmark';
 import { getCurrentUser } from '@/lib/supabaseAuth';
 import { entities } from '@/api/supabaseEntities';
 import { uploadPrivateFile } from '@/lib/supabaseStorage';
@@ -59,7 +59,7 @@ export default function BrokerApplication(){
   if(loading)return <div className="db-loading"><div><div className="db-spinner"/><span>Loading application…</span></div></div>;
   const approved=profile?.status==='approved';
   return <div className="db-shell">
-    <header className="db-topbar"><div className="db-brand"><div className="db-brandmark"><Logo/></div><span>Relay</span></div><button className="db-button secondary db-admin-back" onClick={()=>navigate(-1)}>← Back</button></header>
+    <header className="db-topbar"><div className="db-brand"><RelayWordmark width={100} dark /></div><button className="db-button secondary db-admin-back" onClick={()=>navigate(-1)}>← Back</button></header>
     <main className="db-page">
       <div className="db-heading-row"><div><div className="db-eyebrow">{isIndividual?'Individual onboarding':'Broker onboarding'}</div><h1>{isIndividual?'Identity verification':'Broker application'}</h1><p>{isIndividual?'Verify your identity before posting delivery jobs.':'Complete your company profile before posting delivery jobs.'}</p></div></div>
       <div className="db-verify-wrap">

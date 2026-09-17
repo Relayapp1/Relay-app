@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import Logo from '@/components/Logo';
+import RelayWordmark from '@/components/RelayWordmark';
 import { getCurrentUser, updateCurrentUser, logout } from '@/lib/supabaseAuth';
 import { entities } from '@/api/supabaseEntities';
 import { createSignedUrl } from '@/lib/supabaseStorage';
@@ -141,7 +141,7 @@ export default function AccountProfile(){
     {documents.some(([,uri])=>uri)?documents.map(([label,uri])=><div className="db-document-row" key={label}><div><strong>{label}</strong><small>{uri?'Uploaded securely':'Not uploaded'}</small></div>{uri&&<button className="db-link-btn" onClick={()=>openDocument(uri)}>View</button>}</div>):<div className="db-empty"><strong>No documents uploaded</strong>Complete your vetting application to add documents.</div>}
   </div></section>;
   return <div className="db-shell">
-    <header className="db-topbar"><div className="db-brand"><div className="db-brandmark"><Logo/></div><span>Relay</span></div></header>
+    <header className="db-topbar"><div className="db-brand"><RelayWordmark width={100} dark /></div></header>
     <main className="db-page">
       <PullToRefresh onRefresh={load}/>
       <div className="db-heading-row"><div><div className="db-eyebrow">{isAdmin?'Admin':isIndividual?'Individual':isBroker?'Broker':'Driver'} account</div><h1>My profile</h1><p>Your contact information, documents, activity, and reviews.</p></div><div style={{display:'flex',gap:10,flexWrap:'wrap'}}>{!isPoster&&<button className="db-button secondary" onClick={()=>navigate('/trips')}>My trips</button>}{isDriveBidOwner(user)&&<button className="db-button secondary" onClick={()=>navigate('/admin')}>Admin</button>}</div></div>

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import Logo from '@/components/Logo';
+import RelayWordmark from '@/components/RelayWordmark';
 import { getCurrentUser } from '@/lib/supabaseAuth';
 import { entities } from '@/api/supabaseEntities';
 import { uploadPrivateFile, createSignedUrl } from '@/lib/supabaseStorage';
@@ -430,7 +430,7 @@ export default function TripCenter(){
   const isPoster=user?.account_type!=='driver';
   const chatMessages=chatTrip?messages.filter(m=>m.trip_id===chatTrip.id).slice().sort((a,b)=>new Date(a.created_date)-new Date(b.created_date)):[];
   return <div className="db-shell">
-    <header className="db-topbar"><div className="db-brand"><div className="db-brandmark"><Logo/></div><span>Relay</span></div><button className="db-button secondary db-admin-back" onClick={()=>navigate(-1)}>← Back</button></header>
+    <header className="db-topbar"><div className="db-brand"><RelayWordmark width={100} dark /></div><button className="db-button secondary db-admin-back" onClick={()=>navigate(-1)}>← Back</button></header>
     <main className="db-page">
       <PullToRefresh onRefresh={load}>
       <div className="db-heading-row"><div><div className="db-eyebrow">{isPoster?'Posted work':'Assigned work'}</div><h1>My trips</h1><p>{isPoster?'Track your drivers’ progress, expenses, location, and payments.':'Track hours, expenses, trip progress, location, and payment status.'}</p></div><button className="db-button secondary" onClick={()=>navigate('/profile')}>My profile</button></div>

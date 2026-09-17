@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import Logo from '@/components/Logo';
+import RelayWordmark from '@/components/RelayWordmark';
 import { getCurrentUser, updateCurrentUser, logout } from '@/lib/supabaseAuth';
 import { entities } from '@/api/supabaseEntities';
 import { createSignedUrl } from '@/lib/supabaseStorage';
@@ -249,7 +249,7 @@ export default function AdminDashboard(){
 
   return <div className="db-shell">
     <header className="db-topbar">
-      <div className="db-brand"><div className="db-brandmark"><Logo/></div><span>Relay Admin</span></div>
+      <div className="db-brand"><RelayWordmark width={100} dark /></div>
       <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:14}}>
         <button className="db-avatar" onClick={()=>setMenu(!menu)} aria-label="Account menu">{(me?.full_name||me?.email||'A').split(/\s|@/).filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase()}</button>
       </div>

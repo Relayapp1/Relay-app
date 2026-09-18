@@ -71,11 +71,17 @@ export async function loginWithPassword(email, password) {
   return { user: await mergeUser(data.user) };
 }
 
-export async function signUp(email, password) {
+export async function signUp(email, password, accountType) {
   const { error } = await supabase.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: window.location.origin + '/profile?onboarding=1' },
+    options: {
+      emailRedirectTo: window.location.origin + '/profile?onboarding=1',
+      // Read server-side by handle_new_user() when it creates the profile
+      // row — reliable regardless of which tab/device confirms the email,
+      // unlike the sessionStorage handoff AccountProfile.jsx used before.
+      data: { account_type: accountType },
+    },
   });
   if (error) throw error;
 }

@@ -33,7 +33,7 @@ export default function Register() {
       // confirms via the emailed link and lands there — same handoff the
       // Google/Apple paths below already use.
       sessionStorage.setItem('drivebid_signup_role', accountType);
-      await signUp(email, password);
+      await signUp(email, password, accountType);
       setShowCheckEmail(true);
     } catch (err) {
       setError(err.message || "Registration failed");

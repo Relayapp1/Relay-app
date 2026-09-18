@@ -72,7 +72,11 @@ export async function loginWithPassword(email, password) {
 }
 
 export async function signUp(email, password) {
-  const { error } = await supabase.auth.signUp({ email, password });
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: window.location.origin + '/profile?onboarding=1' },
+  });
   if (error) throw error;
 }
 

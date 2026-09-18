@@ -83,7 +83,7 @@ export default function DataConsent() {
 
         <section className="db-panel" style={{ padding: 24 }}>
           <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontWeight: 700, fontSize: '.92rem', cursor: 'pointer' }}>
-            <input type="checkbox" checked={checked} onChange={e => setChecked(e.target.checked)} style={{ width: 'auto', marginTop: 3 }} />
+            <input type="checkbox" checked={checked} onChange={e => setChecked(e.target.checked)} style={{ width: 22, height: 22, minWidth: 22, marginTop: 2, accentColor: '#ff151f' }} />
             I have read this disclosure and I authorize Relay to collect, view, and store the personal information described above{isDriver ? ', including reviewing my driving history,' : ''} as part of my Relay account.
           </label>
           <div className="db-form-actions" style={{ marginTop: 18 }}>

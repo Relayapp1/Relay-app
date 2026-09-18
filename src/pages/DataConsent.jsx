@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import RelayWordmark from '@/components/RelayWordmark';
 import { getCurrentUser, updateCurrentUser } from '@/lib/supabaseAuth';
+import { useAuth } from '@/lib/AuthContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import '@/drivebid.css';
 
@@ -8,6 +9,7 @@ const CONSENT_VERSION = '1.0';
 
 export default function DataConsent() {
   const navigate = useNavigate();
+  const { checkUserAuth } = useAuth();
   const [params] = useSearchParams();
   const returnTo = params.get('returnTo') || '/';
   const [user, setUser] = useState(null);
@@ -27,6 +29,13 @@ export default function DataConsent() {
     setSaving(true); setMessage('');
     try {
       await updateCurrentUser({ data_consent_accepted_at: new Date().toISOString(), data_consent_version: CONSENT_VERSION });
+      // The app-level route guard (App.jsx) reads its own cached user from
+      // AuthContext, not this page's local state, and that cache only
+      // refreshes on real auth events (sign-in, token refresh, etc.) — a
+      // plain profiles UPDATE doesn't fire one. Without this, the guard
+      // still sees the old (unconsented) user and immediately bounces back
+      // to this same page right after we navigate away from it.
+      await checkUserAuth();
       navigate(returnTo, { replace: true });
     } catch (error) { setMessage(error.message || 'Could not save your consent'); }
     finally { setSaving(false); }

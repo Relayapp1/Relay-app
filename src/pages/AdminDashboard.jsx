@@ -101,6 +101,16 @@ export default function AdminDashboard(){
     finally{setSaving('');}
   };
 
+  const updateAccountType=async(user,account_type)=>{
+    setSaving(`user-${user.id}`);
+    setData(prev=>({...prev,users:prev.users.map(u=>u.id===user.id?{...u,account_type}:u)}));
+    try{
+      await entities.User.update(user.id,{account_type});
+      await load();
+    }catch(err){await load();setError(err.message||'Could not update account type');}
+    finally{setSaving('');}
+  };
+
   const saveJob=async(id,changes)=>{
     setSaving(`job-${id}`);
     try{ await entities.Deal.update(id,changes); await load(); setError('Job updated.'); }
@@ -363,7 +373,23 @@ export default function AdminDashboard(){
       </div>}
 
       {tab==='users'&&<Table headers={['Name','Email','Account type','Platform role','Joined']} rows={data.users.map(user=>[
-        user.full_name||'—',user.email||'—',user.account_type||'Not selected',user.role||'user',dateText(user.created_date)
+        user.full_name||'—',
+        user.email||'—',
+        <select
+          key="account_type"
+          value={user.account_type||'driver'}
+          disabled={saving===`user-${user.id}`||user.id===me?.id}
+          title={user.id===me?.id?"You can't change your own account type here.":undefined}
+          onChange={e=>updateAccountType(user,e.target.value)}
+          className="db-admin-select"
+        >
+          <option value="driver">Driver</option>
+          <option value="broker">Broker</option>
+          <option value="individual">Individual</option>
+          <option value="admin">Admin</option>
+        </select>,
+        user.role||'user',
+        dateText(user.created_date)
       ])} empty="No registered users yet."/>}
 
       {tab==='jobs'&&<JobManager deals={data.deals} bids={data.bids} onSave={saveJob} onDelete={deleteJob} onCancel={cancelJob} onDecideBid={decideBid} onCreate={createJob} busy={Boolean(saving)}/>}
